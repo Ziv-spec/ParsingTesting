@@ -21,6 +21,13 @@ typedef double f64;
 #define false 0
 #define true 1
 
+#define DUBUG
+
+#if DEBUG
+#define Assert(expression) if(!(expression)) { *(int *)0 = 0; } 
+#else
+#define Assert(expression)
+#endif
 // I will compile as one traslations unit.
 // As such, I will use the internal keyword
 // for all function definitions.
@@ -50,6 +57,44 @@ Error_Messages error;                \
 // create a new type
 CreateTypeAndErrorType(int);
 
+// --- Stack definitions: ---
+
+// I will need to hold the enums 
+// within this stack, as such, 
+// I will not create a general purpose 
+// stack, and will focus on a super
+// simple implementation.
+
+typedef struct Stack 
+{
+    s32 *values;
+    s32 index;
+    s32 size;
+} Stack; 
+
+static Stack global_parser_stack;
+
+
+void stack_push(s32 value)
+{
+    Assert(global_parser_stack.size-1 < global_parser_stack.index);
+    global_parser_stack.values[++global_parser_stack.index] = value;
+}
+
+b32 stack_pop(s32 *value)
+{
+    if (global_parser_stack.index < 1) { return false; }
+    *value = global_parser_stack.values[--global_parser_stack.index];
+    return true;
+}
+
+b32 stack_top(s32 *value)
+{
+    if (global_parser_stack.index < 1) { return false; }
+    *value = global_parser_stack.values[global_parser_stack.index];
+    return true;
+}
+
 // --- String definitions: --- 
 
 // This is the definiiton of a slice
@@ -77,22 +122,6 @@ typedef struct String_Buffer
 } String_Buffer;
 
 
-// Takes a slice and copise it's data int a default string.
-// NOTE(ziv): This function does not take the 'buffer' length. 
-// As such, there is no way to tell if this funciton will 
-// overrun the 'buffer'. This can create a problem and should 
-// not be used for the most part (slices don't have this problem).
-internal void 
-slice_to_default_string(string slice, char *buffer) 
-{
-    int slice_index = slice.index;
-    while (slice.size < slice_index) 
-    {
-        *(buffer + slice_index) = *(slice.data + slice_index); 
-    }
-}
-
-
 internal void
 default_string_to_slice(char *buffer, string slice)
 {
@@ -105,7 +134,7 @@ default_string_to_slice(char *buffer, string slice)
     }
 }
 
-// computes the size of a given string that has a null terminator.
+/** computes the size of a given string that has a null terminator. */
 internal int 
 string_size(char *string)
 {
@@ -117,6 +146,39 @@ string_size(char *string)
     }
     return string_size;
 }
+
+internal b32 
+string_compare(char *value1, char *value2)
+{
+    b32 success = true;
+    for (; *value1; value1++)
+    {
+        if (*value2++ != *value1)
+        {
+            success = false;
+        }
+    }
+    return success;
+}
+
+internal char *
+slice_to_string(string slice)
+{
+    
+    char *result = (char *)malloc(slice.size+1); 
+    char *temp_char = result; 
+    for (s32 counter = 0; counter < slice.size; counter++)
+    {
+        *temp_char++ = *slice.data++;
+    }
+    *temp_char = '\0';
+    return result;
+}
+
+/* ----- END of String Definitions ----- */ 
+
+// TODO(ziv): cleanup needed here !!!
+// the following  is not needed for the parser.
 
 // extracts a word upto a whitespace newline or a null terminator.
 // the word is returned and the index in the command line is updated. 
@@ -296,6 +358,39 @@ parse_command_line(char *command_line, int size)
 
 
 
+typedef struct String_Node
+{
+    char *text; 
+    struct String_Node *next; 
+} String_Node;
+
+typedef struct String_List
+{
+    String_Node *head; 
+    String_Node *tail; 
+} String_List;
+
+void add_string_to_list(String_List *string_list, char *text)
+{
+    if (!string_list->head)
+    {
+        string_list->head = (String_Node *)malloc(sizeof(String_Node));
+        string_list->head->next = NULL;
+        string_list->tail = string_list->head;
+        
+    }
+    if (!string_list->tail->next)
+    {
+        string_list->tail = string_list->tail->next;
+        string_list->tail->text = text;
+        string_list->tail->next = NULL;
+    }
+    else 
+    {
+        fprintf(stderr, "Error: string list has a next value when adding.");
+    }
+}
+
 
 typedef struct Location
 {
@@ -312,10 +407,10 @@ typedef enum Types
     TYPES_COUNT // this will be the count of all of the types as it will grow and shrink with the number of enum types.
 } Types;
 
-// This is kind of the things for the future. 
+// Things for the future. 
 typedef struct Ast_Node 
 {
-    string key;  // has to be an string, if not then error it out. 
+    char *key;  // has to be an string, if not then error it out. 
     void *value; // can be of many types, as such it is a pointer to memory.
     Types type;   // type of data contained in this.
     Location location;
@@ -324,9 +419,11 @@ typedef struct Ast_Node
 
 typedef struct Ast_Object
 {
-    string *keys;
+    String_List keys;
+    Ast_Node *head_value;
+    
     Ast_Node *values;
-    Types type;
+    
 } Ast_Object; 
 
 typedef struct Lexer
@@ -345,7 +442,7 @@ enum Token_Types
     TOKEN_COMMA, 
     TOKEN_LEFT_BRACKET,
     TOKEN_RIGHT_BRACKET, 
-    TOKEN_STRING
+    TOKEN_VALUE
 };
 
 typedef struct Token
@@ -355,20 +452,12 @@ typedef struct Token
     char *text; // if there is a key/value, the text will save it up for layter use.
 } Token;
 
-internal char *
-slice_to_string(string slice)
-{
-    
-    char *result = (char *)malloc(slice.size+1); 
-    char *temp_char = result; 
-    for (s32 counter = 0; counter < slice.size; counter++)
-    {
-        *temp_char++ = *slice.data++;
-    }
-    *temp_char = '\0';
-    return result;
-}
-
+/**
+ Checks if the character is a 'trash' value, and returns 
+ a boolean value. True if it is, False if it isn't.
+A 'trash' value is defined as a space, newline,
+ tab, null terminator.
+*/
 internal b32
 trash_value(char value)
 {
@@ -377,33 +466,26 @@ trash_value(char value)
 }
 
 
-#define TOKENIZE(token_character,token_type) if (*(lexer->text + lexer->location.index) == token_character) { \
-lexer->location.index++; \
-token_out->tk_type = token_type; \
-token_out->text = (char *)token_character; \
-success = true; \
-}\
-
 internal b32
 get_next_token(Lexer *lexer, Token *token_out)
 {
     
-    // tokenize
+    // TODO(ziv): Fix Location bugs.
+    
     b32 success = false;
     
-    if (!lexer->text[lexer->location.index])
-    {
-        fprintf(stderr, "Error: end of file while parsing.");
-        return success;
+    if (!lexer->text[lexer->location.index]) { 
+        return success; 
     }
     
-    
+    // Get rid of trash values like space, newline, tab, null terminator
     char current_char = *(lexer->text + lexer->location.index);
     while (trash_value(current_char))
     {
-        if (current_char == '\n') 
+        if (current_char == '\n') // newline  
         {
             lexer->location.line++;
+            lexer->location.character = 0;
         }
         lexer->location.character++;
         lexer->location.index++;
@@ -414,6 +496,18 @@ get_next_token(Lexer *lexer, Token *token_out)
     string slice_buffer = {0}; 
     slice_buffer.data = lexer->text + lexer->location.index;
     b32 is_value_token = false;
+    
+    s32 token_beginning_index = lexer->location.index; // I want the 
+    // token location to be the beginning of its first character. 
+    
+    
+#define TOKENIZE(token_character,token_type) if (*(lexer->text + lexer->location.index) == token_character) { \
+lexer->location.index++; \
+token_out->tk_type = token_type; \
+token_out->text = (char *)token_character; \
+success = true; \
+}\
+    
     
     TOKENIZE('{',TOKEN_LEFT_CURLY)
         else TOKENIZE('}', TOKEN_RIGHT_CURLY)
@@ -441,33 +535,14 @@ get_next_token(Lexer *lexer, Token *token_out)
     if (is_value_token)
     {
         token_out->text = slice_to_string(slice_buffer);
-        token_out->tk_type = TOKEN_STRING;
+        token_out->tk_type = TOKEN_VALUE;
         success = true;
     }
     
-    token_out->location = lexer->location;
-    return success;
-}
-
-/* 
-internal void 
-parse_next()
-{
+    token_out->location = lexer->location; 
+    lexer->location.character += (lexer->location.index - token_beginning_index); // advances
+    // the lexer location character by the difference in the old and new indexes.
     
-}
- */
-
-internal b32 
-string_compare(char *value1, char *value2)
-{
-    b32 success = true;
-    for (; *value1; value1++)
-    {
-        if (*value2++ != *value1)
-        {
-            success = false;
-        }
-    }
     return success;
 }
 
@@ -512,9 +587,9 @@ print_token(Token token)
             token_type_in_string = "TOKEN_RIGHT_BRACKET";
         } break;
         
-        case TOKEN_STRING:
+        case TOKEN_VALUE:
         {
-            token_type_in_string = "TOKEN_STRING";
+            token_type_in_string = "TOKEN_VALUE";
         } break;
         
     }
@@ -529,41 +604,214 @@ print_token(Token token)
     }
     padding[counter] = '\0';
     
-    if (string_compare(token_type_in_string, "TOKEN_STRING"))
+    if (string_compare(token_type_in_string, "TOKEN_VALUE"))
     {
-        
-        printf("_%s_ %s%s at %d:%d\n", token_type_in_string, padding, token.text, token.location.line, token.location.character); 
-        
+        printf("%s%s%d:%d  %s\n", token_type_in_string,padding, token.location.line, token.location.character,token.text); 
     }
     else
     {
-        printf("_%s_ %s%s at %d:%d\n", token_type_in_string,padding, &((char)token.text), token.location.line, token.location.character); 
+        printf("%s%s%d:%d  %s\n", token_type_in_string, padding, token.location.line, 
+               token.location.character, &((char)token.text)); // a hack because I can't bother with implementing a real solution to a 'non-problem'.
     }
     
 }
 
-internal Ast_Node *
-parse(char *input_buffer)
+void init_global_parser_stack()
 {
+#define STACK_SIZE 1024
+    // NOTE: There is no need to be freed as it will get freed at 
+    // the exit of the application.
+    global_parser_stack.values = (s32 *)malloc(STACK_SIZE); 
+    global_parser_stack.size   = STACK_SIZE; 
+    global_parser_stack.index  = 0; 
+}
+
+/* 
+enum Parser_Types
+{
+    PARSER_OBJECT,
+    PARSER_NEXT_KEY, 
+    PARSER_KEY,
+    PARSER_VALUE,
+    PARSER_STRING
+} Parser_Types; 
+ */
+
+
+typedef struct Parser
+{
+    Ast_Object *head;
+    Ast_Object *last_node;
+    Ast_Object *current_node;
     
-    Lexer lexer = {0};
+    char *text;
+    char *key; 
+    char *value;
+} Parser;
+
+
+internal Ast_Node *
+parse_json(char *input_buffer)
+{
+    init_global_parser_stack();
+    
+    Lexer lexer = {0}; // Location will be initialized correctly.
     lexer.text = input_buffer; 
-    lexer.location; 
-    
+    lexer.location.line = 1; // Most code editors begin at line 1. 
     Token token = {0}; 
     
     b32 success = get_next_token(&lexer, &token);
-    do 
+    
+    Parser parser = {0};
+    
+    while (success)
     {
-        if (success) 
+        print_token(token);
+        
+        // search for a string token :
+        s32 parser_scope; 
+        // NOTE(ziv): When you don't use the 'parser_scope' value, and want it the next loop, you should push it back. 
+        if (stack_pop(&parser_scope)) // the stack contains something.
         {
-            print_token(token);
+            
+            if (parser_scope == TOKEN_LEFT_CURLY) // the beginning of an object.
+            {
+                parser.current_node = (Ast_Object *)malloc(sizeof(Ast_Object)); 
+                parser.current_node->head_value = NULL; 
+                parser.current_node->values = NULL; 
+                stack_push(parser_scope);
+                
+            }
+            else if (parser_scope == TOKEN_RIGHT_CURLY) // the end of an object.
+            {
+                
+                s32 last_scope; 
+                stack_pop(&last_scope); 
+                if (last_scope == TOKEN_LEFT_CURLY)
+                {
+                    
+                }
+            }
+            else if (parser_scope == TOKEN_SEMI_COLEN) // beginning/end of string.
+            {
+                
+                // TODO(ziv): Continue working on this !!! 
+                // I was trying to finalize somewhat the 
+                // types. The nodes and objects are 
+                // currently underdevelopment, and I, 
+                // should continue. 
+                
+                s32 is_value; 
+                if (stack_pop(&is_value) == TOKEN_COLON)
+                {
+                    //parser.current_node = parser.text;
+                }
+                else // it is a key.
+                {
+                    stack_push(is_value);
+                    //(Ast_Node *)malloc(sizeof(Ast_Node))
+                    
+                    
+                    add_string_to_list(&parser.head->keys, parser.text);
+                    
+                }
+            }
+            else if (parser_scope == TOKEN_VALUE) 
+            {
+                parser.text = token.text;
+            }
+            
+        }
+        else // The stack does not contain anything. I should just push the matching stuff.
+        {
+            
+            if (token.tk_type == TOKEN_VALUE)
+            {
+                // some value that needs construction. 
+                fprintf(stderr, "Error at %d:%d. No objects found.\n", token.location.line,token.location.character);
+                return NULL;
+            } 
+            else if(token.tk_type == TOKEN_COMMA)
+            {
+                fprintf(stderr, "Error at %d:%d. Begins with comma.\n", token.location.line,token.location.character);
+                return NULL;
+            }
+            else if(token.tk_type == TOKEN_RIGHT_CURLY)
+            {
+                fprintf(stderr, "Error at %d:%d. Begins with right curly bracket.\n", token.location.line,token.location.character);
+                return NULL;
+            }
+            else if(token.tk_type == TOKEN_RIGHT_BRACKET)
+            {
+                fprintf(stderr, "Error at %d:%d. Begins with right bracket.\n", token.location.line,token.location.character);
+                return NULL;
+            }
+            else
+            {
+                stack_push(token.tk_type);
+            }
+            
         }
         success = get_next_token(&lexer, &token);
-    } while (success);
+    }
+    
+    if (!success) 
+    {
+        // we are on a bad time 
+    }
+    
     
     return NULL;
 }
+
+
+
+
+
+/* 
+if (last_tk_type == TOKEN_LEFT_CURLY) // general object
+{
+    if (current_tk_type == TOKEN_RIGHT_CURLY)
+    {
+        // create object type.
+    }
+    else
+    {
+        // error
+    }
+    
+} else if (last_tk_type == TOKEN_SEMI_COLEN) // string
+{
+    if (current_tk_type )
+    {
+    }
+    else 
+    {
+        // error
+    }
+    
+}else if (last_tk_type == TOKEN_COMMA) // list like thingy
+{
+    if ()
+    {
+        
+    }
+    else
+    {
+        // error
+    }
+}else if (last_tk_type == TOKEN_VALUE) // value that should be an int/float. NOTE float will not be supported for quite a while.
+{
+    // try to turn into an int. 
+}
+stack_push();
+ */
+
+
+
+
+
+
 
 //fprintf(stderr, "Error: Size not matching (%d != %d). Line: %d\n", input_buffer.size, output_buffer.size, __LINE__);
 
@@ -572,7 +820,8 @@ int main(int argc, char **argv)
     if (argc == 1)
     {
         char *file_name = argv[1]; 
-        file_name = "../json_example.json"; 
+        file_name = "C:\\dev\\json\\json_example.json"; 
+        
         FILE *file = fopen(file_name, "r"); 
         if (file)
         {
@@ -585,7 +834,8 @@ int main(int argc, char **argv)
                 fread(buffer, file_size, 1, file); 
                 buffer[file_size] = '\0';
                 
-                fprintf(stdout, "%s\n\n", buffer);
+                
+                fprintf(stdout, "Json data:\n%s\n\n", buffer);
                 
                 fclose(file);
                 
@@ -594,7 +844,7 @@ int main(int argc, char **argv)
                 //
                 
                 
-                Ast_Node *ast_tree = parse(buffer); 
+                Ast_Node *ast_tree = parse_json(buffer); 
                 // This node is the AST tree head node. 
             }
             else
