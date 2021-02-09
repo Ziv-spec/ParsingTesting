@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Type defenitions for project */ 
+/* --- Type defenitions for project --- */ 
 #include <stdint.h>
 typedef int8_t s8; 
 typedef int16_t s16; 
@@ -57,7 +57,7 @@ Error_Messages error;                \
 // create a new type
 CreateTypeAndErrorType(int);
 
-// --- Stack definitions: ---
+/* --- Stack definitions: --- */
 
 // I will need to hold the enums 
 // within this stack, as such, 
@@ -95,7 +95,7 @@ b32 stack_top(s32 *value)
     return true;
 }
 
-// --- String definitions: --- 
+/* --- String definitions: --- */
 
 // This is the definiiton of a slice
 typedef union string_slice
@@ -175,10 +175,6 @@ slice_to_string(string slice)
     return result;
 }
 
-/* ----- END of String Definitions ----- */ 
-
-// TODO(ziv): cleanup needed here !!!
-// the following  is not needed for the parser.
 
 // extracts a word upto a whitespace newline or a null terminator.
 // the word is returned and the index in the command line is updated. 
@@ -282,81 +278,7 @@ convert_string_to_integer(char *string, int size)
     return result; 
 }
 
-internal void 
-parse_command_line(char *command_line, int size)
-{
-    if (command_line[size-1] == '\n') { command_line[size-1] = '\0'; } // I don't like newline at the end of the 'tget()' as it is bad for printf to the console for this specific use case. Thought the size still is the same so I think it should not effect much the things that happen. 
-    
-    String_Buffer command_line_arg = { 0 }; 
-    command_line_arg.data = (char *)command_line; 
-    command_line_arg.size = size;
-    
-    String_Buffer buffer = { 0 }; 
-    buffer.data  = (char *)malloc(sizeof(char) * size);
-    buffer.size = size;
-    
-    char *command = extract_word_no_white_space(&command_line_arg, &buffer);
-    if (strcmp(command, "print") == 0) 
-    {
-        
-        /*         
-                // TODO(ziv): look into how to handle this case in a more elegane and robust way.
-                
-                char *word2 = extract_word_no_white_space(&command_line_arg, &buffer);
-                if (!*word2) { goto free_mem; } // end of the command_line, no need to continue. 
-                WrapError(int) first_number = convert_string_to_integer(*word2);
-                if (first_number.error) { goto free_mem }
-                // a check needed for the length of the string so that it will be known the range 
-                // of the inserted thing.
-                printf("'%d', ", first_number.result);
-                
-                char *word3 = extract_word_no_white_space(&command_line_arg, &buffer);
-                if (!*word3) { goto free_mem; } // end of the command_line, no need to continue. 
-                printf("'%s'\n", word3);
-                 */
-        
-    }
-    else if (strcmp(command, "print_two") == 0) 
-    {
-        char *word1 = extract_word_no_white_space(&command_line_arg, &buffer);
-        if (!*word1) { goto free_mem; } // end of the command_line, no need to continue. 
-        WrapError(int) first_number = convert_string_to_integer(word1, string_size(word1));
-        if (first_number.error) { goto free_mem; }
-        
-        char *word2 = extract_word_no_white_space(&command_line_arg, &buffer);
-        if (!*word2) { goto free_mem; } // end of the command_line, no need to continue.
-        int word2_size = string_size(word2);
-        int second_number = convert_string_to_positive_int(word2, word2_size);
-        if ( second_number == -1 ) { return; } // error while converting into an int. 
-        
-        printf("first number %d\n", first_number.result);
-        printf("The second number is : %d\n", second_number);
-    }
-    
-    
-    
-    // free all of the memory at the end.
-    free_mem:
-    free(buffer.data);
-    return;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/* ----- END Definitions ----- */ 
 
 typedef struct String_Node
 {
@@ -390,7 +312,6 @@ void add_string_to_list(String_List *string_list, char *text)
         fprintf(stderr, "Error: string list has a next value when adding.");
     }
 }
-
 
 typedef struct Location
 {
@@ -465,7 +386,6 @@ trash_value(char value)
         value == '\n'   || value == '\t';
 }
 
-
 internal b32
 get_next_token(Lexer *lexer, Token *token_out)
 {
@@ -534,7 +454,7 @@ success = true; \
     }
     if (is_value_token)
     {
-        token_out->text = slice_to_string(slice_buffer);
+        xtoken_out->text = slice_to_string(slice_buffer);
         token_out->tk_type = TOKEN_VALUE;
         success = true;
     }
@@ -764,57 +684,6 @@ parse_json(char *input_buffer)
     return NULL;
 }
 
-
-
-
-
-/* 
-if (last_tk_type == TOKEN_LEFT_CURLY) // general object
-{
-    if (current_tk_type == TOKEN_RIGHT_CURLY)
-    {
-        // create object type.
-    }
-    else
-    {
-        // error
-    }
-    
-} else if (last_tk_type == TOKEN_SEMI_COLEN) // string
-{
-    if (current_tk_type )
-    {
-    }
-    else 
-    {
-        // error
-    }
-    
-}else if (last_tk_type == TOKEN_COMMA) // list like thingy
-{
-    if ()
-    {
-        
-    }
-    else
-    {
-        // error
-    }
-}else if (last_tk_type == TOKEN_VALUE) // value that should be an int/float. NOTE float will not be supported for quite a while.
-{
-    // try to turn into an int. 
-}
-stack_push();
- */
-
-
-
-
-
-
-
-//fprintf(stderr, "Error: Size not matching (%d != %d). Line: %d\n", input_buffer.size, output_buffer.size, __LINE__);
-
 int main(int argc, char **argv)
 {
     if (argc == 1)
@@ -867,8 +736,6 @@ int main(int argc, char **argv)
 }
 
 
-
-
 /* --- Beginners thoughts on parsing and lexing --- */
 
 // My first 'solution' is to go and lex until you reach 
@@ -890,43 +757,95 @@ int main(int argc, char **argv)
 // other then that there are not a ton of things that 
 // need to change from my first solution.
 
+/* ---- After lexing and beginning of parsing ----- */
+
+// My first thoughts were kind of weird. I thought 
+// that the lexer was a sepret part frome the parser, 
+// and you parse first and only then lexe and then 
+// you bulid the AST. 
+// As I worked on this project I was proven wrong. 
+// The whole process is parsing while some of it 
+// is lexing. 
+
+// --- Lexing ---- 
+// Lexing is easy, you just tokenize all of the 
+// characters as needed and pass it to the parser. 
+// Plus the tokens should contain their location 
+// in the file for more debug and error information. 
+
+// --- Parsing --- 
+// This is the harder part, as it is not as intuitive. 
+// I have yet to finish this part and thinking about 
+// how to represent a structure that contains a pointer
+// to a sturcture is not easy. This also means that I 
+// currently don't have any way of doing so, and I will 
+// move twards that goal (I have an idea alread) in the 
+// future.
+
 /* ------------------------------------------------ */
 
-/* ---    AST Like Structure for json format    --- */ 
 
-// The struct will probably look something like this: 
 
-// first attempt at thinking of something *NOTE* will not really work, 
-// I know this as I have though this through and there are some cases 
-// where it does not handle, I should have one more type. 
 
-#if 0
-typedef struct Location // mainly done for extra information for debugging and knowledge of location when parsing.
+// NOTE(ziv):
+// The following  is not needed for the parser.
+// It was done to get argumens for the command line and 
+// do something with them. Cleanup is needed.
+internal void 
+parse_command_line(char *command_line, int size)
 {
-    s32 row;    // line 
-    s32 column; // column ...
+    if (command_line[size-1] == '\n') { command_line[size-1] = '\0'; } // I don't like newline at the end of the 'tget()' as it is bad for printf to the console for this specific use case. Thought the size still is the same so I think it should not effect much the things that happen. 
     
-    // the location of the thing in the file or something like that for the mostaprt this is just to track the thing for errosr I htink I will think about htis more deeply in some time. 
-} Location; 
-
-typedef struct Ast_Node
-{
-    string key;  // has to be an string, if not then error it out. 
-    void *value; // can be of many types, as such it is a pointer to memory.
-    Type type;   // type of data contained in this.
-    Location location;
-    struct Ast_Node *next;
-} Ast_Node; 
-
-typedef struct Ast_Block
-{
-    Ast_Node *next_node; 
-    Type type;
-    Location location;
-} Ast_Block; 
-#endif
-
-// thet hign htat will happen is I will have 2 ast _ nodes and then I will forge a block that will be its parent 
-// where as the nodes will connect to each other, and there will not be any need for anything else.
-// this should work though there will not be any reas reason for the count then. 
-// I need to think of key-value pairs.
+    String_Buffer command_line_arg = { 0 }; 
+    command_line_arg.data = (char *)command_line; 
+    command_line_arg.size = size;
+    
+    String_Buffer buffer = { 0 }; 
+    buffer.data  = (char *)malloc(sizeof(char) * size);
+    buffer.size = size;
+    
+    char *command = extract_word_no_white_space(&command_line_arg, &buffer);
+    if (strcmp(command, "print") == 0) 
+    {
+        
+        /*         
+                // TODO(ziv): look into how to handle this case in a more elegane and robust way.
+                
+                char *word2 = extract_word_no_white_space(&command_line_arg, &buffer);
+                if (!*word2) { goto free_mem; } // end of the command_line, no need to continue. 
+                WrapError(int) first_number = convert_string_to_integer(*word2);
+                if (first_number.error) { goto free_mem }
+                // a check needed for the length of the string so that it will be known the range 
+                // of the inserted thing.
+                printf("'%d', ", first_number.result);
+                
+                char *word3 = extract_word_no_white_space(&command_line_arg, &buffer);
+                if (!*word3) { goto free_mem; } // end of the command_line, no need to continue. 
+                printf("'%s'\n", word3);
+                 */
+        
+    }
+    else if (strcmp(command, "print_two") == 0) 
+    {
+        char *word1 = extract_word_no_white_space(&command_line_arg, &buffer);
+        if (!*word1) { goto free_mem; } // end of the command_line, no need to continue. 
+        WrapError(int) first_number = convert_string_to_integer(word1, string_size(word1));
+        if (first_number.error) { goto free_mem; }
+        
+        char *word2 = extract_word_no_white_space(&command_line_arg, &buffer);
+        if (!*word2) { goto free_mem; } // end of the command_line, no need to continue.
+        int word2_size = string_size(word2);
+        int second_number = convert_string_to_positive_int(word2, word2_size);
+        if ( second_number == -1 ) { return; } // error while converting into an int. 
+        
+        printf("first number %d\n", first_number.result);
+        printf("The second number is : %d\n", second_number);
+    }
+    
+    
+    
+    // free all of the memory at the end.
+    free_mem:
+    free(buffer.data);
+    return;
+}
