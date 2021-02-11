@@ -28,6 +28,7 @@ typedef double f64;
 #else
 #define Assert(expression)
 #endif
+
 // I will compile as one traslations unit.
 // As such, I will use the internal keyword
 // for all function definitions.
@@ -37,8 +38,8 @@ typedef double f64;
 
 #define size_t s64
 
-
-// My way of handling error that I like to do sometimes. 
+// My way of handling error that I like to do sometimes.
+// That does mean that it should be used carefuly(maybe).
 typedef enum Error_Messages
 {
     Success,
@@ -65,9 +66,11 @@ CreateTypeAndErrorType(int);
 // stack, and will focus on a super
 // simple implementation.
 
+#define SIZE 1024
+
 typedef struct Stack 
 {
-    s32 *values;
+    s32 values[SIZE];
     s32 index;
     s32 size;
 } Stack; 
@@ -75,20 +78,23 @@ typedef struct Stack
 static Stack global_parser_stack;
 
 
-void stack_push(s32 value)
+internal void
+stack_push(s32 value)
 {
     Assert(global_parser_stack.size-1 < global_parser_stack.index);
-    global_parser_stack.values[++global_parser_stack.index] = value;
+    global_parser_stack.values[global_parser_stack.index++] = value;
 }
 
-b32 stack_pop(s32 *value)
+internal b32 
+stack_pop(s32 *value)
 {
     if (global_parser_stack.index < 1) { return false; }
     *value = global_parser_stack.values[--global_parser_stack.index];
     return true;
 }
 
-b32 stack_top(s32 *value)
+internal b32 
+stack_top(s32 *value)
 {
     if (global_parser_stack.index < 1) { return false; }
     *value = global_parser_stack.values[global_parser_stack.index];
@@ -292,7 +298,8 @@ typedef struct String_List
     String_Node *tail; 
 } String_List;
 
-void add_string_to_list(String_List *string_list, char *text)
+internal void
+add_string_to_list(String_List *string_list, char *text)
 {
     if (!string_list->head)
     {
@@ -356,7 +363,7 @@ typedef struct Lexer
 
 enum Token_Types  
 {
-    TOKEN_LEFT_CURLY,
+    TOKEN_LEFT_CURLY = 1,
     TOKEN_RIGHT_CURLY,
     TOKEN_SEMI_COLEN, 
     TOKEN_COLON,
@@ -454,7 +461,7 @@ success = true; \
     }
     if (is_value_token)
     {
-        xtoken_out->text = slice_to_string(slice_buffer);
+        token_out->text = slice_to_string(slice_buffer); // TODO(ziv): implemented in a super hacky way, for debug purposes, should refactor this to be better in all ways. 
         token_out->tk_type = TOKEN_VALUE;
         success = true;
     }
@@ -466,8 +473,10 @@ success = true; \
     return success;
 }
 
+/** Prints out a message that contains the token, where it was found, and the character/text that it contains. This is for debug purposes only, as it is kind of crappy and should most definetly change. 
+*/ 
 internal void
-print_token(Token token)
+debug_print_token(Token token)
 {
     
     char *token_type_in_string = ""; 
@@ -541,7 +550,7 @@ void init_global_parser_stack()
 #define STACK_SIZE 1024
     // NOTE: There is no need to be freed as it will get freed at 
     // the exit of the application.
-    global_parser_stack.values = (s32 *)malloc(STACK_SIZE); 
+    //global_parser_stack.values = (s32 *)malloc(STACK_SIZE); 
     global_parser_stack.size   = STACK_SIZE; 
     global_parser_stack.index  = 0; 
 }
@@ -558,15 +567,19 @@ enum Parser_Types
  */
 
 
+typedef struct ParseStringInfo
+{
+    char *text; 
+    b32 is_key; 
+} StringType;
+
 typedef struct Parser
 {
     Ast_Object *head;
     Ast_Object *last_node;
     Ast_Object *current_node;
     
-    char *text;
-    char *key; 
-    char *value;
+    ParseStringInfo string_info; 
 } Parser;
 
 
@@ -586,11 +599,11 @@ parse_json(char *input_buffer)
     
     while (success)
     {
-        print_token(token);
+        debug_print_token(token);
         
-        // search for a string token :
         s32 parser_scope; 
         // NOTE(ziv): When you don't use the 'parser_scope' value, and want it the next loop, you should push it back. 
+        
         if (stack_pop(&parser_scope)) // the stack contains something.
         {
             
@@ -600,11 +613,10 @@ parse_json(char *input_buffer)
                 parser.current_node->head_value = NULL; 
                 parser.current_node->values = NULL; 
                 stack_push(parser_scope);
-                
             }
             else if (parser_scope == TOKEN_RIGHT_CURLY) // the end of an object.
             {
-                
+                // TODO(ziv): create the object and handle the child nodes and objects, that it might have already created but never connected to a head object.
                 s32 last_scope; 
                 stack_pop(&last_scope); 
                 if (last_scope == TOKEN_LEFT_CURLY)
@@ -615,40 +627,49 @@ parse_json(char *input_buffer)
             else if (parser_scope == TOKEN_SEMI_COLEN) // beginning/end of string.
             {
                 
-                // TODO(ziv): Continue working on this !!! 
-                // I was trying to finalize somewhat the 
-                // types. The nodes and objects are 
-                // currently underdevelopment, and I, 
-                // should continue. 
+                if (parser.string_info.is_key) // <- process key. 
+                {
+                    // TODO(ziv): Handle the creation of a key.
+                    //Ast_Node *node = (Ast_Node *)malloc(sizeof(Ast_Node)); 
+                    // create a key here. 
+                }
+                else if (!parser.string_info.is_key) // <- process value
+                {
+                    // TODO(ziv): Handle all of the things that you might need with, a value.
+                    add_string_to_list(&parser.head->keys, parser.string_info.text);
+                }
                 
-                s32 is_value; 
-                if (stack_pop(&is_value) == TOKEN_COLON)
-                {
-                    //parser.current_node = parser.text;
-                }
-                else // it is a key.
-                {
-                    stack_push(is_value);
-                    //(Ast_Node *)malloc(sizeof(Ast_Node))
-                    
-                    
-                    add_string_to_list(&parser.head->keys, parser.text);
-                    
-                }
             }
             else if (parser_scope == TOKEN_VALUE) 
             {
-                parser.text = token.text;
+                parser.string_info.text = token.text;
+            }
+            else if (parser_scope == TOKEN_COLON) // Marks the next string to be a value. 
+            {
+                if (parser.string_info.text)
+                {
+                    parser.string_info.is_key = false;
+                }
+                else
+                {
+                    // TODO(ziv): Think of a better error message. 
+                    fprintf(stderr, "Error at %d:%d. Colon for a value before any key.", token.location.line, token.location.character);
+                }
+            }
+            else if (parser_scope == TOKEN_COMMA)
+            {
+                // TODO(ziv): Implement this !!!
+                stack_push(parser_scope); 
             }
             
         }
         else // The stack does not contain anything. I should just push the matching stuff.
         {
-            
+            // TODO(ziv): Continue implementing the many things that are missing here. 
             if (token.tk_type == TOKEN_VALUE)
             {
                 // some value that needs construction. 
-                fprintf(stderr, "Error at %d:%d. No objects found.\n", token.location.line,token.location.character);
+                fprintf(stderr, "Error at %d:%d. Begins with value.\n", token.location.line,token.location.character);
                 return NULL;
             } 
             else if(token.tk_type == TOKEN_COMMA)
@@ -670,7 +691,6 @@ parse_json(char *input_buffer)
             {
                 stack_push(token.tk_type);
             }
-            
         }
         success = get_next_token(&lexer, &token);
     }
@@ -757,7 +777,7 @@ int main(int argc, char **argv)
 // other then that there are not a ton of things that 
 // need to change from my first solution.
 
-/* ---- After lexing and beginning of parsing ----- */
+/* ---- After lexing, and beginning of parsing ---- */
 
 // My first thoughts were kind of weird. I thought 
 // that the lexer was a sepret part frome the parser, 
