@@ -299,7 +299,12 @@ parse_json(char *input_buffer)
             }
         }
 #endif
-        error= get_next_token(&lexer, &token);
+#define DEBUG 1
+#if DEBUG
+        printf(" %d %s\n", error, token.text);
+#endif
+        error = get_next_token(&lexer, &token);
+        
     }
     
     if (error) 

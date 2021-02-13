@@ -80,11 +80,17 @@ debug_print_token(Token token)
 enum Lexer_Error
 {
     TOKEN_MESSAGE_SUCCESS = 0, // should be zero so 'if (!error)' would be possible.
-    TOKEN_MESSAGE_STRING,
-    TOKEN_MESSAGE_INTEGER, 
-    TOKEN_MESSAGE_FLOAT,
-    TOKEN_MESSAGE_END,  
+    TOKEN_MESSAGE_STRING  = 1,
+    TOKEN_MESSAGE_INTEGER = 2, 
+    TOKEN_MESSAGE_FLOAT   = 3,
+    TOKEN_MESSAGE_END     = 4,  
 } Lexer_Error_Code; 
+
+inline b32
+is_number(char value)
+{
+    return '0' <= value && value <= '9';
+}
 
 /**
 Checks if the character is a 'trash' value, and returns 
@@ -92,11 +98,10 @@ a boolean value. True if it is, False if it isn't.
 A 'trash' value is defined as a space, newline,
 tab, null terminator.
 */
-internal b32
+inline b32
 trash_value(char value)
 {
-    return value  == ' '|| value  == '\0' || 
-        value == '\n'   || value == '\t';
+    return value  == ' '|| value == '\n'   || value == '\t';
 }
 
 internal b32
@@ -142,21 +147,73 @@ error = TOKEN_MESSAGE_SUCCESS;             \
         else TOKENIZE(",", TOKEN_COMMA) 
         else TOKENIZE("[", TOKEN_LEFT_BRACKET)
         else TOKENIZE("]", TOKEN_RIGHT_BRACKET)
-        else if (cursor == '"')
+        else 
     {
         string slice_buffer = {0}; 
-        lexer->location.index++; // skip the " 
-        slice_buffer.data = lexer->text + lexer->location.index; // beginning of slice.
-        cursor = *(lexer->text + lexer->location.index);
         
-        for (;cursor && cursor != '"'; cursor = *(lexer->text + lexer->location.index))
+        if (cursor == '"') // string
         {
-            lexer->location.index++;
-            slice_buffer.size++;
+            lexer->location.index++; // skip the " 
+            slice_buffer.data = lexer->text + lexer->location.index; // beginning of slice.
+            cursor = *(lexer->text + lexer->location.index);
+            for (;cursor && cursor != '"'; cursor = *(lexer->text + lexer->location.index))
+            {
+                lexer->location.index++;
+                slice_buffer.size++;
+            }
+            lexer->location.index++; // skip the 
+            if (cursor)
+            {
+                char *token_text = (char *)malloc(slice_buffer.size + 1);
+                int counter = 0;
+                for (; counter < slice_buffer.size; counter++)
+                {
+                    token_text[counter] = slice_buffer.data[counter];
+                }
+                *(token_text + counter) = '\0';
+                token_out->text = token_text;
+                token_out->tk_type = TOKEN_STRING;
+                error = TOKEN_MESSAGE_SUCCESS;
+            }
+            else
+            {
+                error = TOKEN_MESSAGE_STRING;
+            }
+            
         }
-        lexer->location.index++;
-        if (cursor)
+        else // integer/float
         {
+            slice_buffer.data = lexer->text + lexer->location.index; // beginning of slice.
+            b32 is_floating_point = false;
+            cursor = *(lexer->text + lexer->location.index);
+            for (; is_number(cursor); cursor = *(lexer->text + lexer->location.index))
+            {
+                lexer->location.index++;
+                slice_buffer.size++;
+            }
+            
+            if (cursor == '.')
+            {
+                is_floating_point = true;
+                
+                lexer->location.index++; 
+                slice_buffer.size++;
+                cursor = *(lexer->text + lexer->location.index);
+                for (;'0' < cursor && cursor < '9'; cursor = *(lexer->text + lexer->location.index))
+                {
+                    lexer->location.index++;
+                    slice_buffer.size++;
+                }
+                
+            }
+            else
+            {
+                cursor = *(lexer->text + lexer->location.index-1);
+                if (!is_number(cursor))
+                {
+                    error = TOKEN_MESSAGE_INTEGER;
+                }
+            }
             
             char *token_text = (char *)malloc(slice_buffer.size + 1);
             int counter = 0;
@@ -164,72 +221,20 @@ error = TOKEN_MESSAGE_SUCCESS;             \
             {
                 token_text[counter] = slice_buffer.data[counter];
             }
-            counter++;
-            token_text[counter] = '\0';
+            *(token_text + counter) = '\0';
             token_out->text = token_text;
-            token_out->tk_type = TOKEN_STRING;
             error = TOKEN_MESSAGE_SUCCESS;
-        }
-        else
-        {
-            error = TOKEN_MESSAGE_STRING;
+            if (is_floating_point)
+            {
+                token_out->tk_type = TOKEN_FLOAT;
+            }
+            else
+            {
+                token_out->tk_type = TOKEN_INTEGER;
+            }
         }
         
     }
-    else // maybe an integer. Floating point numbers are not supported yet. 
-    {
-        /* 
-                string slice_buffer = {0}; 
-                slice_buffer.data = lexer->text + lexer->location.index;
-                
-                b32 is_floating_point = false;
-                cursor = *(lexer->text + lexer->location.index++);
-                while ('0' < cursor && cursor < '9' || cursor == '.');
-                {
-                    slice_buffer.size++;
-                    if (is_floating_point)
-                    {
-                        if (cursor == '.' )
-                        {
-                            error = TOKEN_MESSAGE_FLOAT;
-                        }
-                        else
-                        {
-                            // it is a floating point number
-                            
-                        }
-                    }
-                    else
-                    {
-                        if (cursor == '.' )
-                        {
-                            is_floating_point = true;
-                        }
-                    }
-                    cursor = *(lexer->text + lexer->location.index++);
-                }
-                if (cursor)
-                {
-                    slice_buffer.data; 
-                    char *token_text = (char *)malloc(slice_buffer.size);
-                    
-                    int counter = 0;
-                    for (; counter < slice_buffer.size; counter++)
-                    {
-                        token_text[counter] = slice_buffer.data[counter];
-                    }
-                    token_text[++counter] = '\0';
-                    token_out->text = token_text;
-                    error = TOKEN_MESSAGE_SUCCESS;
-                }
-                else
-                {
-                    error = TOKEN_MESSAGE_STRING;
-                }
-                 */
-        
-    }
-    
     // synces the out token location.  
     token_out->location = lexer->location; 
     lexer->location.character += (lexer->location.index - token_beginning_index);
