@@ -19,7 +19,7 @@ typedef struct Lexer
 
 enum Token_Types  
 {
-    TOKEN_LEFT_CURLY,
+    TOKEN_LEFT_CURLY = 1,
     TOKEN_RIGHT_CURLY,
     TOKEN_RIGHT_BRACKET, 
     TOKEN_LEFT_BRACKET,
@@ -114,9 +114,7 @@ get_next_token(Lexer *lexer, Token *token_out)
     }
     
     // Get rid of trash values like space, newline, tab, null terminator
-    
-    // cursor that points to the latest character.
-    char cursor = *(lexer->text + lexer->location.index); 
+    char cursor = *(lexer->text + lexer->location.index); // cursor that points to the latest character.
     while (trash_value(cursor))
     {
         if (cursor == '\n')
@@ -151,7 +149,7 @@ error = TOKEN_MESSAGE_SUCCESS;             \
     {
         string slice_buffer = {0}; 
         
-        if (cursor == '"') // string
+        if (cursor == '"') // tokenize string
         {
             lexer->location.index++; // skip the " 
             slice_buffer.data = lexer->text + lexer->location.index; // beginning of slice.
@@ -161,7 +159,7 @@ error = TOKEN_MESSAGE_SUCCESS;             \
                 lexer->location.index++;
                 slice_buffer.size++;
             }
-            lexer->location.index++; // skip the 
+            lexer->location.index++; // skip the "
             if (cursor)
             {
                 char *token_text = (char *)malloc(slice_buffer.size + 1);
@@ -181,7 +179,7 @@ error = TOKEN_MESSAGE_SUCCESS;             \
             }
             
         }
-        else // integer/float
+        else // tokenize integer/float
         {
             slice_buffer.data = lexer->text + lexer->location.index; // beginning of slice.
             b32 is_floating_point = false;
@@ -192,11 +190,14 @@ error = TOKEN_MESSAGE_SUCCESS;             \
                 slice_buffer.size++;
             }
             
+            // TODO(ziv): Fix the case: '0.' . In that case, infinite loop.
+            // Now that I have checked another time, it does not seem like a problem. 
+            // will have to do more in depth check to know for sure.
             if (cursor == '.')
             {
                 is_floating_point = true;
                 
-                lexer->location.index++; 
+                lexer->location.index++; // skip the '.'
                 slice_buffer.size++;
                 cursor = *(lexer->text + lexer->location.index);
                 for (;'0' < cursor && cursor < '9'; cursor = *(lexer->text + lexer->location.index))
@@ -204,7 +205,6 @@ error = TOKEN_MESSAGE_SUCCESS;             \
                     lexer->location.index++;
                     slice_buffer.size++;
                 }
-                
             }
             else
             {
@@ -235,6 +235,7 @@ error = TOKEN_MESSAGE_SUCCESS;             \
         }
         
     }
+    
     // synces the out token location.  
     token_out->location = lexer->location; 
     lexer->location.character += (lexer->location.index - token_beginning_index);
