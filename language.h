@@ -22,8 +22,6 @@ typedef double f64;
 #define false 0
 #define true 1
 
-#define DUBUG
-
 #if DEBUG
 #define Assert(expression) if(!(expression)) { *(int *)0 = 0; } 
 #else
@@ -40,28 +38,6 @@ typedef double f64;
 #endif
 
 #define size_t s64
-
-// My way of handling error that I like to do sometimes.
-// That does mean that it should be used carefuly(maybe).
-typedef enum Error_Messages
-{
-    Success,
-    Failure,
-} Error_Messages;
-
-#define CreateTypeAndErrorType(type) \
-typedef struct type_and_error        \
-{                                    \
-type result;                         \
-Error_Messages error;                \
-} Type_And_Error                     \
-
-#define WrapError(type) type_and_error
-
-// create a new type
-CreateTypeAndErrorType(int);
-
-/* --- Stack definitions: --- */
 
 /* --- String definitions: --- */
 
@@ -184,13 +160,15 @@ extract_word_no_white_space(String_Buffer *command_line, String_Buffer *buffer)
     return result;
 }
 
+#define is_number(value) ('0' <= value && value <= '9')
+
 // converts a character of a number between 0 and 9
 // into a integer eqivelent.
 internal int 
 convert_char_to_positive_int(char character)
 {
     int result = character - '0'; 
-    if ( 0 <= result && result <= 9)
+    if (is_number(result))
     {
         return result;
     }
@@ -203,8 +181,6 @@ convert_char_to_positive_int(char character)
 internal int 
 convert_string_to_positive_int(char *string, int size)
 {
-    // simple conversion where theres is not much to do.
-    
     int result  = 0;
     int exp     = 1;
     int counter = 0;
@@ -228,6 +204,7 @@ convert_string_to_positive_int(char *string, int size)
     return result;
 }
 
+/* 
 // Converts a 'char *' string to a integer.
 internal WrapError(int) 
 convert_string_to_integer(char *string, int size)
@@ -247,5 +224,6 @@ convert_string_to_integer(char *string, int size)
     
     return result; 
 }
+ */
 
 #endif //LANGUAGE_H
