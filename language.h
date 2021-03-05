@@ -204,6 +204,28 @@ convert_string_to_positive_int(char *string, int size)
     return result;
 }
 
+internal b32
+strmerge(char *dest, s32 dest_size, 
+         const char *src1, s32 size1, 
+         const char *src2, s32 size2)
+{
+    if (!dest || !src1 || !src2 || 
+        dest_size > (size1 + size2))  return false;
+    
+    for (; *src1; src1++)
+    {
+        *dest++ = *src1;
+    }
+    
+    for (; *src2; src2++)
+    {
+        *dest++ = *src2;
+    }
+    *dest++ = '\0';
+    
+    return true;
+}
+
 /* 
 // Converts a 'char *' string to a integer.
 internal WrapError(int) 

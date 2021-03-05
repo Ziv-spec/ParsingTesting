@@ -15,8 +15,9 @@ int main(int argc, char **argv)
     if (argc == 1) // TODO(ziv): Change this to 2. 
     {
         char *file_name = argv[1]; 
+		
         file_name = "C:\\dev\\json\\json_example.json";  // TODO(ziv): Remove this. 
-        
+        file_name = "C:\\Users\\natal\\OneDrive\\Desktop\\super_large_json_file.txt";
         FILE *file = fopen(file_name, "r"); 
         if (file)
         {
@@ -38,9 +39,9 @@ int main(int argc, char **argv)
                 //
                 
                 Ast_Node *ast_tree = parse_json(buffer); 
-                // This node is the AST tree head node. 
-                //debug_print_ast_tree(ast_tree); 
-                ast_tree->map_list;
+                debug_print_json_from_ast_node(ast_tree);
+				// This node is the AST tree head node. 
+				//debug_print_ast_tree(ast_tree); 
             }
             else
             {
@@ -60,3 +61,4 @@ int main(int argc, char **argv)
     }
     return 0;
 }
+
