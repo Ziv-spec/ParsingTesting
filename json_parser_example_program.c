@@ -28,20 +28,22 @@ int main(int argc, char **argv)
             {
                 fseek(file, 0, SEEK_SET);
                 fread(buffer, file_size, 1, file); 
-                buffer[file_size] = '\0';
+                buffer[file_size] = '\0'; // null terminate the file.
                 
-                fprintf(stdout, "Json data:\n%s\n\n", buffer);
+                fprintf(stdout, "Json data:\n%s\n\n", buffer); // prints out the file contents.
                 
                 fclose(file);
                 
-                // 
-                // Begin the parsing  
-                //
-                
                 Ast_Node *ast_tree = parse_json(buffer); 
-                debug_print_json_from_ast_node(ast_tree);
+                
+				// let me how it looks.
+				debug_print_json_from_ast_node(ast_tree);
+				
 				// This node is the AST tree head node. 
-				//debug_print_ast_tree(ast_tree); 
+				//debug_print_ast_tree(ast_tree);
+				
+				free(buffer); // although, it should get freed at the end of the application.
+				// so... I don't have to do this.
             }
             else
             {
