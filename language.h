@@ -1,3 +1,4 @@
+#if 0
 /* date = February 12th 2021 7:10 pm */
 
 #ifndef LANGUAGE_H
@@ -226,26 +227,6 @@ strmerge(char *dest, s32 dest_size,
     return true;
 }
 
-/* 
-// Converts a 'char *' string to a integer.
-internal WrapError(int) 
-convert_string_to_integer(char *string, int size)
-{
-    WrapError(int) result = {0}; // error is failer
-    
-    b32 is_negative = *string == '-';
-    if (is_negative) 
-    {
-        string++; // ignore the '-'
-    }
-    
-    int positive_int = convert_string_to_positive_int(string, string_size(string)); 
-    if ( positive_int == -1 ) { return result; }
-    result.result = positive_int * is_negative * -1 + positive_int * !is_negative;
-    result.error  = Success; 
-    
-    return result; 
-}
- */
 
 #endif //LANGUAGE_H
+#endif
