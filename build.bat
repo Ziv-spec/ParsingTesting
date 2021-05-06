@@ -11,4 +11,7 @@ SET CompilerFlags=-MT -nologo -Gm- -GR- -EHa- -FC -Z7 -Oi -DEBUG=0 %CompilerFlag
 
 cl %WARNIGS% %CompilerFlags% ..\json_parser_example_program.c  
 
+rem cl %WARNIGS% %CompilerFlags% ..\tests.c  
+rem tests.exe
+
 popd

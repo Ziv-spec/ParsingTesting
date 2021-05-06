@@ -47,15 +47,22 @@ typedef union string_slice
 {
     struct 
     {
-        char *data;
         s32 size;
+        char *data;
     };
     
     struct
     {
-        char *data; 
         s32 index;
+        char *data; 
     };
+	
+	struct
+	{
+		s32 capacity; 
+		char *data;
+	};
+	
 } string, string_slice;
 
 

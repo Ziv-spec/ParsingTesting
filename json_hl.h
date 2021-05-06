@@ -4,11 +4,11 @@
 #define JSON_HL_H
 
 /* TODO(ziv):
-  
   - @working Finish the list type in the parser. 
   Continue to add more error messages.
  Create a function that converts from my node type to a general hash table.
-s@Cleanup for the enums as I have toom nay of them nad I don't really need it. 
+
+@Cleanup for the enums as I have toom nay of them nad I don't really need it. 
 */
 
 //
@@ -16,7 +16,7 @@ s@Cleanup for the enums as I have toom nay of them nad I don't really need it.
 // 
 
 // NOTE(ziv): This should get changed. This is because, 
-// I no like to override types for others. Instead, 
+// I no like to override types for others. Instead,
 // the types that the project will have different name 
 // so I there will be no naming colissions.
 
@@ -35,17 +35,20 @@ typedef int    b32;
 typedef float  f32; 
 typedef double f64;
 
+
 #define false 0
 #define true 1
 
 #if DEBUG
-#define Assert(expression) if(!(expression)) { *(int *)0 = 0; } 
+#define Assert(expression) if(!(expression)) { *(int *)0 = 0; }
 #else
 #define Assert(expression)
 #endif
 
 // returns true or false if a character is a number.
 #define is_number(value) ('0' <= value && value <= '9')
+// if the value is a number then it can convert it to an integer.
+#define to_number(value) (value - '0')
 
 // This assumes that if you use the unity compilation model
 // you use the internal keyword. If not, you can thank me later :)
@@ -67,27 +70,36 @@ typedef double f64;
 #define global static
 #endif 
 
-#define size_t s64
+//#define size_t s64
 
+#include <string.h> // memcpy
+#include <stdio.h>  // printf, fopen..
+#include <stdlib.h> // malloc
 
 ////////////////////////////////
 // 
 // Strings
 // 
 
-typedef union 
+typedef union
 {
     struct 
     {
-        char *data;
         s32 size;
+        char *data;
     };
     
     struct
     {
-        char *data; 
         s32 index;
+        char *data; 
     };
+	
+	struct 
+	{
+		s32 capacity; 
+		char *data;
+	};
 } string, string_slice;
 
 internal b32   string_compare(char *value1, char *value2); /* compares between two null terminated strings */ 
@@ -129,8 +141,8 @@ internal b32 error_showed; // a global variable that allows or disables output o
 typedef struct Memory_Block
 {
 	struct Memory_Block *next; // next memory pool.
-	size_t  buffer_capacity;   // size of the memory buffer.
-	size_t  offset;            // where the last allocation happened.
+	size_t buffer_capacity;   // size of the memory buffer.
+	size_t offset;            // where the last allocation happened.
 	void   *buffer;            // memory buffer. 
 } Memory_Block;
 
@@ -144,6 +156,7 @@ typedef struct Context
 {
 	void *(*alloc)(s32);   // function for allocating memory. 
 	void  (*free)(void);   // function for freeing the allocated memory.
+	void *(*realloc)(void *, size_t); // function for reallcating memory.
 	Memory_Pool memory;    // the default memory pool
 	s32   allocation_size; // the default size for each block of memory.
 } Context; 
@@ -157,7 +170,8 @@ json_memory_alloc(s32 requested_size)
 {
 	Memory_Block *last_block = context.memory.tail;
 	
-	if ((last_block->offset + requested_size) < last_block->buffer_capacity)
+	// check if there is enough space in the block
+	if ((last_block->offset + requested_size) < last_block->buffer_capacity) 
 	{
 		void *requested_memory = (u8 *)last_block->buffer + last_block->offset;
 		last_block->offset += requested_size; 
@@ -180,6 +194,17 @@ json_memory_alloc(s32 requested_size)
 	}
 }
 
+// TODO(ziv): evaluate whether I truly need this !!! 
+
+/* 
+internal void *
+json_memory_realloc(const void *old_memory, size_t old_size, size_t new_size)
+{
+	
+	
+}
+ */
+
 internal void
 json_memory_free()
 {
@@ -201,7 +226,7 @@ json_memory_free()
 
 internal void 
 init_global_context(s32 block_size)
-{
+{ 
 	context.alloc = &json_memory_alloc;
 	context.free =  &json_memory_free;
 	
@@ -214,9 +239,6 @@ init_global_context(s32 block_size)
 	context.memory.head->buffer = (u8 *)context.memory.head + sizeof(Memory_Block); 
 	context.memory.tail = context.memory.head;
 }
-
-
-
 
 
 ////////////////////////////////
@@ -237,9 +259,9 @@ typedef struct Parser
     Location location; // parsers location in the text buffer.
 } Parser; 
 
-enum Token_Types // all characters known to the parser.
+typedef enum Token_Types // all characters known to the parser.
 {
-    TOKEN_NONE          = 0,   // 0x0
+    TOKEN_UNKNOWN       = 0,   // 0x0
     TOKEN_LEFT_CURLY    = 1,   // 0x1
     TOKEN_RIGHT_CURLY   = 2,   // 0x2
     TOKEN_RIGHT_BRACKET = 4,   // 0x4 
@@ -250,8 +272,8 @@ enum Token_Types // all characters known to the parser.
     TOKEN_INTEGER       = 128, // 8x0
     TOKEN_STRING        = 256, // 10x0 
     TOKEN_FLOAT         = 512, // 20x0
-    TOKEN_UNKNOWN       = 1024 // 40x0
-};
+    TOKEN_NONE          = 1024 // 40x0
+} Token_Types;
 
 typedef struct Token
 {
@@ -297,21 +319,22 @@ internal void debug_print_token(Token token); // prints the token given.
 // Parsing
 //
 
-typedef enum Value_Type
+// General types that the json format specifies.
+typedef enum Simple_Types
 {
-    VALUE_TYPE_NONE    = 1,
-    VALUE_TYPE_OBJECT  = 2,
-    VALUE_TYPE_LIST    = 4,
-    VALUE_TYPE_STRING  = 8,
-    VALUE_TYPE_INTEGER = 16, 
-    VALUE_TYPE_FLOAT   = 32
-} Value_Type;
+	TYPE_String  = 1, 
+	TYPE_Float   = 2,  
+	TYPE_Integer = 8, 
+	TYPE_Object  = 4, 
+	TYPE_Array   = 16, 
+	TYPE_Null    = 32
+} Simple_Types;
 
 typedef struct Key_Value_Node
 {
-    char *key;            // key 
-    void *value;          // value of any type that the enum Value_Type has. 
-	s32 value_type_flag;  // flags are of type Value_Type that tell what type is the value.
+    char *key;   // key 
+    void *value; // value of any type that the enum Value_Type has. 
+	Simple_Types value_type_flag;  // flags are of type Value_Type that tell what type is the value.
     struct Key_Value_Node *next; 
 } Key_Value_Node;
 
@@ -327,126 +350,100 @@ init_key_value_node()
     Key_Value_Node *key_value_map = (Key_Value_Node *)context.alloc(sizeof(Key_Value_Node)); 
     key_value_map->key = NULL; 
     key_value_map->value = NULL; 
-    key_value_map->value_type_flag = VALUE_TYPE_NONE; 
+    key_value_map->value_type_flag = (Simple_Types)0; 
     key_value_map->next = NULL;
     return key_value_map;
 }
 
 
-////////////////////////////////
-
-
-typedef enum Node_Type
+typedef struct Json_Type
 {
-    NODE_TYPE_OBJECT, 
-    NODE_TYPE_LIST
-} Node_Type;
-
-typedef struct Ast_Node 
-{
-    Key_Value_List map_list; // a map from a key to a value.
-    Node_Type type;          // can be a list or a regular object. This will determine how to use the key and value list.
-} Ast_Node; 
-
-internal Ast_Node *
-init_ast_node()
-{
-    Ast_Node *node = (Ast_Node *)context.alloc(sizeof(Ast_Node));
-    *node = {0};
-    return node;
-}
+	Simple_Types type;
+	
+	union 
+	{
+		struct {
+			size_t capacity;
+			size_t index;
+			Json_Type *data;
+		} array; 
+		
+		struct {
+			char *key; 
+			struct Json_Value *value;
+			struct Json_Value *next;
+		} object;
+		
+		string_slice string;
+		
+		size_t integer;
+		double floating_point;
+	};
+} Json_Type; 
 
 // The following functions parse known types. 
 // They handle their own errors, and return NULL 
 // when an error has occored. 
-internal Key_Value_Node *parse_key_value_pair(Parser *parser);
-internal Ast_Node       *parse_object(Parser *parser);
-internal Ast_Node       *parse_list(Parser *parser);
+internal Key_Value_Node  *parse_key_value_pair(Parser *parser);
+internal Json_Type       *parse_object(Parser *parser);
+internal Json_Type       *parse_array(Parser *parser);
+internal b32              parse_array_basic_type(Parser *parser, Token_Types token_type);
+internal Json_Type       *parse_json(char *input_buffer);
 
-internal Ast_Node *parse_json(char *input_buffer);
-
+internal b32              string_slice_to_integer(string_slice number, size_t *result);
 
 ////////////////////////////////
 
-
-enum Simple_Types
+typedef struct Json_Type_Array
 {
-	String  = 1, 
-	Float   = 2,  
-	Object  = 4, 
-	Array   = 8, 
-	Integer = 16
-};
+	size_t index;     // index
+	size_t capacity;  // in bytes
+	Json_Type *data;  // the data
+} Json_Type_Array; 
 
-typedef struct Complex_Type_Node
-{
-	s32 structure_flags;
-	struct Complex_Type_Node *next; 
-} Complex_Type_Node;
-
-typedef struct Complex_Type
-{
-	Complex_Type_Node *head; 
-	Complex_Type_Node *tail; 
-} Complex_Type; 
-
-internal Complex_Type 
-create_complex_type_from_object(Ast_Node *obj)
-{
-	// TODO(ziv): go through and check this again.
-	Complex_Type complex_type_head; 
-	complex_type_head.head = (Complex_Type_Node *)context.alloc(sizeof(Complex_Type_Node)); 
-	*complex_type_head.head = {0}; 
-	
-	complex_type_head.tail = complex_type_head.head;
-	
-	Key_Value_Node *pairs_head = obj->map_list.head; 
-	Complex_Type_Node *type_head = complex_type_head.head;
-	
-	// TODO(ziv): Fix the bug in here. If 'pairs_head' is NULL, there is going to be an error here.
-	
-	// Go through each pairs_head and add that type to the complex_type_list. 
-	while (pairs_head->next)
-	{
-		type_head->structure_flags |= pairs_head->value_type_flag;
-		type_head->next = (Complex_Type_Node *)context.alloc(sizeof(Complex_Type_Node)); 
-		type_head->next->structure_flags = 0;
-		
-		type_head  = type_head->next;
-		pairs_head = pairs_head->next;
-	}
-	
-	if (pairs_head)
-	{
-		type_head->structure_flags |= pairs_head->value_type_flag;
-		type_head->next = NULL;
-		
-		type_head  = type_head->next;
-		pairs_head = pairs_head->next;
-	}
-	
-	return complex_type_head; 
-}
+internal b32  array_add_element(Json_Type_Array *arr, Json_Type elem);
+internal Json_Type_Array *init_json_type_array();
 
 internal b32 
-compare_object_to_complex_type(Ast_Node *obj, Complex_Type type)
+array_add_element(Json_Type_Array *arr, Json_Type elem)
 {
-	Key_Value_Node *obj_head = obj->map_list.head; 
-	Complex_Type_Node *type_head = type.head; 
+	Assert(elem.type == 0); // bad element.
+	if (!arr->data)  return false;
 	
-	while (type_head && obj_head)
+	if (arr->capacity <= arr->index) 
 	{
-		if ((obj_head->value_type_flag) != type_head->structure_flags)
-		{
-			// will need to throw an error.
-			return false;
-		}
-		type_head = type_head->next; 
-		obj_head = obj_head->next; 
+		// not enough space, realloc more space.
+		// TODO(ziv): use realloc here. 
+		size_t new_size = (size_t)((f64)arr->capacity * 1.5f); // TODO(ziv): find a better way of finding a better number.
+		Json_Type *new_array = (Json_Type *)context.alloc(new_size);
+		memcpy(new_array, arr->data, arr->capacity);
+		arr->data = new_array; 
 	}
+	
+	arr->data[arr->index++] = elem;
 	return true;
 }
 
+internal Json_Type_Array *init_json_type_array()
+{
+	Json_Type_Array *jt_arr = (Json_Type_Array *)context.alloc(sizeof(Json_Type_Array));
+	*jt_arr = {0}; 
+	
+	if (!jt_arr) 
+	{
+		LogError("error: could not allocate memeory");
+		return NULL; 
+	}
+	
+	jt_arr->data = (Json_Type *)context.alloc(sizeof(Json_Type) * 5); 
+	if (!jt_arr->data) 
+	{
+		LogError("error: could not allocate memeory");
+		return NULL; 
+	}
+	
+	return jt_arr;
+}
 
 ////////////////////////////////
 
@@ -481,7 +478,7 @@ parser->location.character++;               \
 token_out->token_type = is_token_type;      \
 token_out->text = token_string;             \
 success = true;                             \
-}                                          \
+}                                           \
     
     TOKENIZE("{",TOKEN_LEFT_CURLY)
         else TOKENIZE("}", TOKEN_RIGHT_CURLY)
@@ -511,7 +508,8 @@ success = true;                             \
             parser->location.index++; // skip the ending "
             
             char *token_text = slice_to_string(slice_buffer);
-            token_out->text = token_text;
+            token_out->text_size = slice_buffer.size;
+			token_out->text = token_text;
             token_out->token_type = TOKEN_STRING;
             success = true;
         }
@@ -602,7 +600,8 @@ success = true;                             \
 		while (peek_next_token(parser, &trash_token) && 
 			   trash_token.token_type == TOKEN_UNKNOWN)
         {
-            get_next_token(parser, &trash_token); // eat the token.
+			// TODO(ziv): Fix the seemingly infinite call to the function as it creates a stackoverflow error.
+            get_next_token(parser, &trash_token); // eat the token. 
 			dest_text[character_index++] = *trash_token.text; 
 			if (character_index > MAX_BUFFER_SIZE)
 			{
@@ -627,7 +626,8 @@ peek_next_token(Parser *parser, Token *token_out)
 {
     Location old_location = parser->location;
     b32 success = get_next_token(parser, token_out); 
-    parser->location = old_location;
+    parser->location = old_location; // reseting the parser location.
+	// because get_next_token moved the location, we use the old one instead.
     return success;
 }
 
@@ -673,29 +673,29 @@ parse_key_value_pair(Parser *parser)
     if (token.token_type == TOKEN_STRING) // try to figure out the type.
     {
         key_value_map->value = (void *)token.text; 
-        key_value_map->value_type_flag = VALUE_TYPE_STRING;
+        key_value_map->value_type_flag = TYPE_String;
     }
     else if (token.token_type == TOKEN_INTEGER)
     {
         key_value_map->value = (void *)token.text; 
-        key_value_map->value_type_flag = VALUE_TYPE_INTEGER;
+        key_value_map->value_type_flag = TYPE_Integer;
     }
     else if (token.token_type == TOKEN_FLOAT)
     {
         key_value_map->value = (void *)token.text; 
-        key_value_map->value_type_flag = VALUE_TYPE_FLOAT;
+        key_value_map->value_type_flag = TYPE_Float;
     }
     else if (token.token_type == TOKEN_LEFT_CURLY)
     {
-        Ast_Node *node = parse_object(parser);
+        Json_Type *node = parse_object(parser);
 		key_value_map->value = node; 
-		key_value_map->value_type_flag = VALUE_TYPE_OBJECT;
+		key_value_map->value_type_flag = TYPE_Object;
     }
 	else if (token.token_type == TOKEN_LEFT_BRACKET)
 	{
-		Ast_Node *node =  parse_list(parser); 
-		key_value_map->value = node; 
-		key_value_map->value_type_flag = VALUE_TYPE_LIST;
+		Json_Type *node =  parse_array(parser); 
+		key_value_map->value = node;
+		key_value_map->value_type_flag = TYPE_Array;
 	}
     else 
     {
@@ -707,18 +707,19 @@ parse_key_value_pair(Parser *parser)
     return key_value_map;
 }
 
-internal Ast_Node *
+internal Json_Type *
 parse_object(Parser *parser)
 {
     Token token; 
     b32 success = false;
-    Ast_Node *node = NULL;
+	Json_Type *node = NULL;
+    
     
 	// empty object.
 	if (peek_next_token(parser, &token) && token.token_type == TOKEN_RIGHT_CURLY)
 	{
 		get_next_token(parser, &token);
-		return NULL;
+		return node;
 	}
 	
     Key_Value_List key_value_list;
@@ -741,9 +742,9 @@ parse_object(Parser *parser)
 	{
 		if (token.token_type == TOKEN_RIGHT_CURLY)
 		{
-			node = init_ast_node();
-			node->map_list = key_value_list;
-			node->type = NODE_TYPE_OBJECT;
+			Json_Type json_type = {0}; 
+			json_type.type = TYPE_Object;
+			json_type.object = key_value_list;
 		}
 		else
 		{
@@ -757,113 +758,180 @@ parse_object(Parser *parser)
 		return NULL;
 	}
 	
+	node = (Json_Type *)malloc(sizeof(Json_Type)); 
+	node->object = key_value_list;
+	node->type = TYPE_Object;
+	
 	return node;
 }
 
-internal Ast_Node *
-parse_list(Parser *parser)
+internal s32
+parse_array_basic_type(Parser *parser, Token_Types token_type) 
+{
+	b32 success = 0;
+	s32 array_length = 0; 
+	Token token;
+	
+	do 
+	{
+		array_length++;
+		
+		success = get_next_token(parser, &token); 
+		if (!success ||
+			token.token_type != TOKEN_COMMA &&
+			token.token_type == TOKEN_RIGHT_BRACKET)  break;
+		success = get_next_token(parser, &token);
+	} while (success && token.token_type == token_type); 
+	
+	if (success)
+	{
+		if (token.token_type == TOKEN_RIGHT_BRACKET)
+		{
+			return array_length;
+		}
+		else if (token.token_type != token_type)
+		{
+			LogError("parsing error(%d:%d): Array of type integer got another type.\nAn array cannot contain multiple types.", 
+					 parser->location.line, parser->location.character);
+		}
+	}
+	else
+	{
+		LogError("parsing error(%d:%d): Unexpected end of file.",
+				 parser->location.line, parser->location.character);
+	}
+	return 0;
+}
+
+internal Json_Type *
+parse_array(Parser *parser)
 {
 	Token token; 
     b32 success = false;
 	
-	// empty list.
+	
 	if (peek_next_token(parser, &token) && token.token_type == TOKEN_RIGHT_BRACKET)
 	{
+		// handle empty list.
 		get_next_token(parser, &token); // eat that token.
-		return NULL;
+		return (Json_Type *)NULL;
 	}
 	
-	Ast_Node *node = init_ast_node();
-	Complex_Type complex_type = {0};
 	
-	success = get_next_token(parser, &token);
-	if (token.token_type == TOKEN_LEFT_CURLY) // OBJECT
+	// create the array
+	Json_Type_Array *jt_arr = init_json_type_array();
+	while (get_next_token(parser, &token)) 
 	{
+		Json_Type jt = {0};
 		
-		Ast_Node *obj = parse_object(parser); 
-		if (!obj) return NULL;
-		
-		complex_type = create_complex_type_from_object(obj); 
-		
-		success =  get_next_token(parser, &token);
-		while (obj && success && token.token_type == TOKEN_COMMA)
+		if (token.token_type == TOKEN_LEFT_BRACKET)    // array 
 		{
-			obj = parse_object(parser);
-			if (!compare_object_to_complex_type(obj, complex_type))
+			jt.type = TYPE_Array;
+			Json_Type *temp = parse_array(parser); 
+			if (temp) jt = *temp;
+		}
+		else if (token.token_type == TOKEN_LEFT_CURLY) // object
+		{
+			jt.type = TYPE_Object;
+			Json_Type *temp = parse_object(parser);
+			if (temp)  jt = *temp;
+		}
+		else if (token.token_type == TOKEN_STRING)     // string
+		{
+			jt.type = TYPE_String;
+			jt.string.size = token.text_size;
+			jt.string.data = token.text;
+		}
+		else if (token.token_type == TOKEN_INTEGER)    // integer 
+		{
+			// create the string slice that stores the number info
+			string_slice s = {0};
+			s.size = token.text_size;
+			s.data = token.text;
+			
+			jt.type = TYPE_Integer;
+			if (!string_slice_to_integer(s, &jt.integer)) 
 			{
-				// TODO(ziv): compelete this once you actually do this.
-				LogError("error parsing(%d:%d): missmatch of types inside an ARRAY ('' != '')", 
+				// unsuccessful
+				LogError("error(%d:%d): internal error, could not convert a integer token to a integer", 
 						 parser->location.line, parser->location.character);
-				return NULL; 
+				return NULL;
 			}
 			
-			success = get_next_token(parser, &token);
+		}
+		else if (token.token_type == TOKEN_FLOAT)      // float
+		{
+			token.token_type = TOKEN_FLOAT;
+		}
+		else if (token.token_type == TOKEN_RIGHT_BRACKET)
+		{
+			// end of the list
+			break;
+		}
+		else // this is an incorrect type
+		{
+			LogError("error(%d:%d): unknown type found %d.",
+					 parser->location.line, parser->location.character, (int)token.token_type);  
+			return NULL;
+		}
+		
+		// Add the element to the list.
+		if (peek_next_token(parser, &token) && token.token_type == TOKEN_COMMA) 
+		{
+			get_next_token(parser, &token); // go over the token
+			if (!array_add_element(jt_arr, jt)) { LogError("error: ran out of memory"); }
+		}
+		else if (jt.type == 0) // unknown token. Meaning before the comma there is no type.
+		{
+			
+			LogError("error(%d:%d): missing comma when dividing between multiple types.", 
+					 parser->location.line, parser->location.character); 
+			return NULL;
 		}
 		
 	}
-	else if (token.token_type == TOKEN_STRING) // STRING
-	{
-		char *text = token.text; 
-		
-	}
-	else if (token.token_type == TOKEN_INTEGER) // INTEGER
-	{
-		
-	}
-	else if (token.token_type == TOKEN_FLOAT) // FLOAT
-	{
-		
-	}
-	else if (token.token_type == TOKEN_LEFT_BRACKET) // ARRAY
-	{
-		
-	}
-	else // Some unknown type.
-	{
-		return NULL; // some problem has occured.
-	}
 	
+	// create the Json_Type for the array.
+	Json_Type *jarr = (Json_Type *)context.alloc(sizeof(Json_Type));
+	jarr->type = TYPE_Array;
+	jarr->array.index    = jt_arr->index; 
+	jarr->array.capacity = jt_arr->capacity; 
+	jarr->array.data     = jt_arr->data;
 	
-	
-	/* 	
-		do 
-		{
-			
-		} while (success && (token.token_type & parser->list_type_flags));
-		 */
-	
-	return node;
+	return jarr;
 }
 
-internal Ast_Node *
+internal Json_Type *
 parse_json(char *input_buffer)
 {
+	// setup
 	init_token_to_string_map();
-	init_global_context(8 * 1024);
+	init_global_context(4 * 1024);
 	
 	Parser parser = {0};
 	parser.text = input_buffer; 
 	parser.location.line = 1; // Most code editors begin at line 1. 
 	
-	Ast_Node *node = NULL;
+	Json_Type *node = NULL;
 	
 	Token token = {0}; 
 	b32 success = get_next_token(&parser, &token);
 	
+	// the only ways that you can start are with a jobj or a array 
 	if (token.token_type == TOKEN_LEFT_CURLY)
 	{
 		node = parse_object(&parser);
 	}
 	else if (token.token_type == TOKEN_LEFT_BRACKET)
 	{
-		node = parse_list(&parser);
+		node = parse_array(&parser);
 	}
 	else 
 	{
-		LogError("error parsing(%d:%d): did not find object/list type at the beginning", parser.location.line, parser.location.character);
+		LogError("error parsing(%d:%d): did not find objec`t/list type at the beginning", parser.location.line, parser.location.character);
 	}
 	
-	context.free();
+	// context.free();
 	
 	return node;
 }
@@ -875,180 +943,155 @@ parse_json(char *input_buffer)
 internal int 
 string_size(char *string)
 {
-    int string_size = 0; 
-    while (*string)
-    {
-        string_size++;
-        string++;
-    }
-    return string_size;
+	int string_size = 0; 
+	while (*string)
+	{
+		string_size++;
+		string++;
+	}
+	return string_size;
 }
 
 internal b32 
 string_compare(char *value1, char *value2)
 {
-    b32 success = true;
-    for (; *value1; value1++)
-    {
-        if (*value2++ != *value1)
-        {
-            success = false;
-        }
-    }
-    return success;
+	b32 success = true;
+	for (; *value1; value1++)
+	{
+		if (*value2++ != *value1)
+		{
+			success = false;
+		}
+	}
+	return success;
 }
 
 internal char *
 slice_to_string(string slice)
 {
-    
-    char *result = (char *)context.alloc(slice.size+1); 
-    char *temp_char = result; 
-    for (s32 counter = 0; counter < slice.size; counter++)
-    {
-        *temp_char++ = *slice.data++;
-    }
-    *temp_char = '\0';
-    return result;
+	
+	char *result = (char *)context.alloc(slice.size+1); 
+	char *temp_char = result; 
+	for (s32 counter = 0; counter < slice.size; counter++)
+	{
+		*temp_char++ = *slice.data++;
+	}
+	*temp_char = '\0';
+	return result;
 }
-
 
 internal b32
 strmerge(char *dest, s32 dest_size, 
-         const char *src1, s32 size1, 
-         const char *src2, s32 size2)
+		 const char *src1, s32 size1, 
+		 const char *src2, s32 size2)
 {
-    if (!dest || !src1 || !src2 || 
-        dest_size > (size1 + size2))  return false;
-    
-    for (; *src1; src1++)
-    {
-        *dest++ = *src1;
-    }
-    
-    for (; *src2; src2++)
-    {
-        *dest++ = *src2;
-    }
-    *dest++ = '\0';
-    
-    return true;
-}
-
-
-
-
-
-
-
-// some really quick witted debug printing for the Ast_Node. 
-internal void debug_print_object(Key_Value_Node *key_value_map, s32 padding_level);
-
-internal void 
-debug_print_padding(s32 padding_level)
-{
-	for (int padding_counter = 0; padding_counter < padding_level; padding_counter++)
-	{
-		Log("\t");
-	}
-}
-
-
-internal void
-debug_print_value(void *value, s32 value_type, s32 padding_level)
-{
+	if (!dest || !src1 || !src2 || 
+		dest_size > (size1 + size2))  return false;
 	
-	if (value_type == VALUE_TYPE_OBJECT)
+	for (; *src1; src1++)
 	{
-		Ast_Node *node = (Ast_Node *)value;
-		if (node)  debug_print_object(node->map_list.head, padding_level);
-		else Log("{}");
+		*dest++ = *src1;
 	}
-	else 
+	
+	for (; *src2; src2++)
 	{
-		//debug_print_padding(padding_level);
-		if (value_type == VALUE_TYPE_STRING)
-		{
-			Log("%c%s%c", '"',(char *)value, '"'); 
-		}
-		else if (value_type == VALUE_TYPE_INTEGER)
-		{
-#define integer_to_string(a) a 
-			Log(integer_to_string((char *)value));
-		}
-		else if (value_type == VALUE_TYPE_FLOAT)
-		{
-#define float_to_string(a) a
-			Log(float_to_string((char *)value));
-		}
-		else 
-		{
-			// I don't handle this. 
-		}
+		*dest++ = *src2;
 	}
-}
-
-internal void
-debug_print_key_value_pair(Key_Value_Node *kv_node, s32 padding_level)
-{
-	debug_print_padding(padding_level); Log("%c%s%c",'"', kv_node->key, '"'); 
-	Log(": "); debug_print_value(kv_node->value, 
-								 kv_node->value_type_flag, 
-								 padding_level); 
+	*dest++ = '\0';
+	
+	return true;
 }
 
 
-internal void
-debug_print_object(Key_Value_Node *key_value_map, s32 padding_level)
+
+#if UINTPTR_MAX == 0xffffffff           /* 32-bit */
+#define MAX_NUM_CHARACTER_LENGTH 10
+#define JSON_INT_MAX INT32_MAX
+#elif UINTPTR_MAX == 0xffffffffffffffff /* 64-bit */
+#define MAX_NUM_CHARACTER_LENGTH 20
+#define JSON_INT_MAX INT64_MAX
+#else                                   /*  wtf   */
+#endif
+
+internal b32
+string_slice_to_integer(string_slice number, size_t *result)
 {
-	Log("{\n"); 
-	if (key_value_map)
+	Assert(number.data == null); // I expect to get valid data.
+	if (!result || !number.data) return 0;
+	
+	size_t number_length = number.capacity;
+	size_t pos = 1; // positions the numbers as they should. Used later.
+	
+	char *str = number.data;
+	if (*str == '-')
 	{
-		for (; key_value_map->next; key_value_map = key_value_map->next)
-		{
-			debug_print_key_value_pair(key_value_map, padding_level + 1);
-			Log(", \n");
-		}
-		debug_print_key_value_pair(key_value_map, padding_level + 1); Log("\n");
-		debug_print_padding(padding_level); 
+		pos           = -1; // make the number be negative (the pos will get multiplied with the number)
+		number_length = number.capacity - 1; // because the character '-' is no longer taken into account
+		str++; // skip the '-'
 	}
-	Log("}");
-}
-
-internal void 
-debug_print_json_from_ast_node(Ast_Node *node)
-{
-	if (node)
+	
+	if (number_length > MAX_NUM_CHARACTER_LENGTH)  return 0; // character length is too large. 
+	
+	// TODO(ziv): use a function like pow? 
+	u32 exp = number_length-1;
+	for (u32 exp_counter = 0; exp_counter < exp; exp_counter++) { pos *= 10; } // 10^exp 
+	
+	size_t number_as_integer = 0; // the generated number
+	if (number_length == MAX_NUM_CHARACTER_LENGTH) 
 	{
-		Key_Value_List kv_map = node->map_list; 
-		if (node->type == NODE_TYPE_OBJECT)
+		
+		// 
+		// Do checks for overflows after we compute almost all of the number
+		// 
+		
+		pos /= 10; // we don't want the units.
+		
+		s32 temp_number = 0;
+		s32 char_index  = 0;
+		while((number.capacity-1) > char_index && 
+			  *str && 
+			  is_number(*str))
 		{
-			debug_print_object(kv_map.head, 0);
+			
+			temp_number = to_number(*str);
+			number_as_integer += temp_number * pos;
+			
+			pos /= 10; str++; char_index++;
 		}
-		else
+		
+		if (number_as_integer > (JSON_INT_MAX / 10))  return 0; // there is an overflow. 
+		
+		if (number.capacity > char_index && *str && is_number(*str)) 
 		{
-			// I cannot handle this for the moment.
+			s32 units = to_number(*str);
+			if (units > JSON_INT_MAX % 10)
+			{
+				return 0;
+			}
+			number_as_integer *= 10; 
+			number_as_integer += units;
 		}
 	}
+	else
+	{
+		s32 temp_number = 0;
+		for (s32 char_index = 0; 
+			 number.capacity > char_index && 
+			 *str && is_number(*str); )
+		{
+			
+			temp_number = to_number(*str);
+			number_as_integer += temp_number * pos;
+			pos /= 10;
+			
+			str++; char_index++;
+		}
+	}
+	
+	*result = number_as_integer;
+	return true;
 }
 
-internal void
-debug_print_token(Token token)
-{
-    
-    char *token_name = token_name_map[token.token_type];
-    
-    char padding[255];
-    s32 longest_size = string_size("TOKEN_RIGHT_BRACKET")-1;
-    s32 token_string_size = string_size(token_name);
-    int counter = 0;
-    for (; counter < longest_size - token_string_size; counter++)
-    {
-        padding[counter] = ' ';
-    }
-    padding[counter] = '\0';
-    
-    printf("%s%s%d:%d  %s\n", token_name,padding, token.location.line, token.location.character, token.text); 
-}
 
 #endif //JSON_HL_H
+
