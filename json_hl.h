@@ -742,46 +742,6 @@ parse_object(Parser *parser)
 	return NULL;
 }
 
-/* 
-internal s32
-parse_array_basic_type(Parser *parser, Token_Types token_type) 
-{
-	b32 success = 0;
-	s32 array_length = 0; 
-	Token token;
-	
-	do 
-	{
-		array_length++;
-		
-		success = get_next_token(parser, &token); 
-		if (!success ||
-			token.token_type != TOKEN_COMMA &&
-			token.token_type == TOKEN_RIGHT_BRACKET)  break;
-		success = get_next_token(parser, &token);
-	} while (success && token.token_type == token_type); 
-	
-	if (success)
-	{
-		if (token.token_type == TOKEN_RIGHT_BRACKET)
-		{
-			return array_length;
-		}
-		else if (token.token_type != token_type)
-		{
-			LogError("parsing error(%d:%d): Array of type integer got another type.\nAn array cannot contain multiple types.", 
-					 parser->location.line, parser->location.character);
-		}
-	}
-	else
-	{
-		LogError("parsing error(%d:%d): Unexpected end of file.",
-				 parser->location.line, parser->location.character);
-	}
-	return 0;
-}
- */
-
 ////////////////////////////////
 
 internal b32 
