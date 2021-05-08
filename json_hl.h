@@ -3,6 +3,16 @@
 #ifndef JSON_HL_H
 #define JSON_HL_H
 
+// NOTE(ziv): The grand plan: 
+// Fix these functions first
+
+// [x] parse_json
+// [x] parse_key_value_pair
+// [x] parse_object 
+// [ ] parse_array
+// [ ] parse_array_basic_type <- what is this??? 
+
+
 /* TODO(ziv):
   - @working Finish the list type in the parser. 
   Continue to add more error messages.
@@ -370,8 +380,8 @@ typedef struct Json_Type
 		
 		struct {
 			char *key; 
-			struct Json_Value *value;
-			struct Json_Value *next;
+			struct Json_Type *value;
+			struct Json_Type *next;
 		} object;
 		
 		string_slice string;
@@ -384,66 +394,12 @@ typedef struct Json_Type
 // The following functions parse known types. 
 // They handle their own errors, and return NULL 
 // when an error has occored. 
-internal Key_Value_Node  *parse_key_value_pair(Parser *parser);
+internal Json_Type  *parse_key_value_pair(Parser *parser);
 internal Json_Type       *parse_object(Parser *parser);
 internal Json_Type       *parse_array(Parser *parser);
-internal b32              parse_array_basic_type(Parser *parser, Token_Types token_type);
 internal Json_Type       *parse_json(char *input_buffer);
 
 internal b32              string_slice_to_integer(string_slice number, size_t *result);
-
-////////////////////////////////
-
-typedef struct Json_Type_Array
-{
-	size_t index;     // index
-	size_t capacity;  // in bytes
-	Json_Type *data;  // the data
-} Json_Type_Array; 
-
-internal b32  array_add_element(Json_Type_Array *arr, Json_Type elem);
-internal Json_Type_Array *init_json_type_array();
-
-internal b32 
-array_add_element(Json_Type_Array *arr, Json_Type elem)
-{
-	Assert(elem.type == 0); // bad element.
-	if (!arr->data)  return false;
-	
-	if (arr->capacity <= arr->index) 
-	{
-		// not enough space, realloc more space.
-		// TODO(ziv): use realloc here. 
-		size_t new_size = (size_t)((f64)arr->capacity * 1.5f); // TODO(ziv): find a better way of finding a better number.
-		Json_Type *new_array = (Json_Type *)context.alloc(new_size);
-		memcpy(new_array, arr->data, arr->capacity);
-		arr->data = new_array; 
-	}
-	
-	arr->data[arr->index++] = elem;
-	return true;
-}
-
-internal Json_Type_Array *init_json_type_array()
-{
-	Json_Type_Array *jt_arr = (Json_Type_Array *)context.alloc(sizeof(Json_Type_Array));
-	*jt_arr = {0}; 
-	
-	if (!jt_arr) 
-	{
-		LogError("error: could not allocate memeory");
-		return NULL; 
-	}
-	
-	jt_arr->data = (Json_Type *)context.alloc(sizeof(Json_Type) * 5); 
-	if (!jt_arr->data) 
-	{
-		LogError("error: could not allocate memeory");
-		return NULL; 
-	}
-	
-	return jt_arr;
-}
 
 ////////////////////////////////
 
@@ -631,25 +587,28 @@ peek_next_token(Parser *parser, Token *token_out)
     return success;
 }
 
-internal Key_Value_Node *
+internal Json_Type *
 parse_key_value_pair(Parser *parser)
 {
+	// looks at the first token in the key value pair.
     Token token;
-    if (!get_next_token(parser, &token))  return NULL;
+    if (!get_next_token(parser, &token))  return NULL; // invalid token.
     
+	// creating the key value pair as a Json_Type.
+	Json_Type *kvp = (Json_Type *)context.alloc(sizeof(Json_Type));
+	kvp->type = TYPE_Object; 
+	kvp->object.next = NULL;
+	
 	//
 	// checks for a key
 	//
-    Key_Value_Node *key_value_map = init_key_value_node();
-    char *key_text = NULL;  // for error prints. 
     if (token.token_type == TOKEN_STRING)
     {
-        key_text = token.text;
-        key_value_map->key = token.text;
+        kvp->object.key = token.text;
     }
     else 
     {
-        LogError("error parsing(%d:%d): expected a key of type 'STRING', got type '%s'.", 
+        LogError("error parsing(%d:%d): inside a object expected a key of type 'STRING', got type '%s'.", 
                  parser->location.line, parser->location.character, token_name_map[token.token_type]); 
         return NULL;
     }
@@ -660,91 +619,116 @@ parse_key_value_pair(Parser *parser)
     if (!get_next_token(parser, &token))  return NULL;
     if (token.token_type != TOKEN_COLON) 
     {
-        LogError("error parsing(%d:%d): after key '%s' expected COLON, got '%s'.", 
-                 parser->location.line, parser->location.character, key_text, token.text);
+        LogError("error parsing(%d:%d): inside an object, after key '%s' expected COLON, got '%s'.", 
+                 parser->location.line, parser->location.character, kvp->object.key, token.text);
         return NULL;
     }
 	
     //
     // checks for a value
 	//
-    if (!get_next_token(parser, &token))  return NULL;
-    
-    if (token.token_type == TOKEN_STRING) // try to figure out the type.
-    {
-        key_value_map->value = (void *)token.text; 
-        key_value_map->value_type_flag = TYPE_String;
-    }
-    else if (token.token_type == TOKEN_INTEGER)
-    {
-        key_value_map->value = (void *)token.text; 
-        key_value_map->value_type_flag = TYPE_Integer;
-    }
-    else if (token.token_type == TOKEN_FLOAT)
-    {
-        key_value_map->value = (void *)token.text; 
-        key_value_map->value_type_flag = TYPE_Float;
-    }
-    else if (token.token_type == TOKEN_LEFT_CURLY)
-    {
-        Json_Type *node = parse_object(parser);
-		key_value_map->value = node; 
-		key_value_map->value_type_flag = TYPE_Object;
-    }
-	else if (token.token_type == TOKEN_LEFT_BRACKET)
+	
+	if (get_next_token(parser, &token))
 	{
-		Json_Type *node =  parse_array(parser); 
-		key_value_map->value = node;
-		key_value_map->value_type_flag = TYPE_Array;
+		// try to figure out the type.
+		
+		if (token.token_type == TOKEN_LEFT_CURLY)
+		{
+			kvp->object.value = parse_object(parser);
+			return kvp;
+		}
+		else if (token.token_type == TOKEN_LEFT_BRACKET)
+		{
+			kvp->object.value = parse_array(parser);
+			return kvp;
+		}
+		
+		kvp->object.value = (Json_Type *)context.alloc(sizeof(Json_Type)); 
+		Json_Type *value  = kvp->object.value;
+		value->object.next = NULL;
+		
+		string_slice s; 
+		s.data = token.text; 
+		s.size = token.text_size;
+		
+		if (token.token_type == TOKEN_STRING) 
+		{
+			value->type = TYPE_String;
+			value->string = s;
+		}
+		else if (token.token_type == TOKEN_INTEGER)
+		{
+			value->type = TYPE_Integer;
+			if (!string_slice_to_integer(s, &value->integer))
+			{
+				// could not create an integer from the number. 
+				// this probalby due to it being too big. 
+			}
+			
+		}
+		else if (token.token_type == TOKEN_FLOAT)
+		{
+			value->type = TYPE_Float; 
+			value->floating_point = 0.4f; // some garbage value until I implement the conversion between string and floating point  
+			
+		}
+		else 
+		{
+			LogError("error parsing(%d:%d): expected VALUE of type OBJECT/LIST/STRING/INTEGER/FLOAT got unknown value '%s'.", 
+					 parser->location.line, parser->location.character, token.text);
+			return NULL;
+		}
+		
 	}
-    else 
-    {
-        LogError("error parsing(%d:%d): expected VALUE of type OBJECT/LIST/STRING/INTEGER/FLOAT got unknown value '%s'.", 
-                 parser->location.line, parser->location.character, token.text);
-        return NULL;
-    }
-    
-    return key_value_map;
+	return kvp;
 }
 
 internal Json_Type *
 parse_object(Parser *parser)
 {
-    Token token; 
     b32 success = false;
 	Json_Type *node = NULL;
-    
-    
+	
+	Token token; 
+	
 	// empty object.
-	if (peek_next_token(parser, &token) && token.token_type == TOKEN_RIGHT_CURLY)
+	if (peek_next_token(parser, &token) && 
+		token.token_type == TOKEN_RIGHT_CURLY)
 	{
-		get_next_token(parser, &token);
-		return node;
+		get_next_token(parser, &token); // eat the token
+		return NULL;
 	}
 	
-    Key_Value_List key_value_list;
-    Key_Value_Node *key_value_node = parse_key_value_pair(parser); // if null the object is empty
-    key_value_list.head = key_value_node;
-    key_value_list.tail = key_value_list.head;
 	
+	Json_Type *kvl_head = parse_key_value_pair(parser);
+	if (!kvl_head) return NULL; // error managed by parse_key_value_pair
+	
+	Json_Type *kvp = NULL;
     success = get_next_token(parser, &token);
-	while (key_value_node && success && 
-		   token.token_type == TOKEN_COMMA)
-    {
-        key_value_node = parse_key_value_pair(parser);
-        key_value_list.tail->next = key_value_node;
-        key_value_list.tail = key_value_list.tail->next;
+	if (success && token.token_type == TOKEN_COMMA)
+	{
+		kvp = parse_key_value_pair(parser);
+		kvl_head->object.next = kvp;
 		
-        success = get_next_token(parser, &token);
-    }
-    
+		success = get_next_token(parser, &token);
+		while (kvp && success && token.token_type == TOKEN_COMMA)
+		{
+			kvp->object.next = parse_key_value_pair(parser);  
+			kvp = kvp->object.next;
+			
+			success = get_next_token(parser, &token);
+		}
+	}
+	else
+	{
+		// something
+	}
+	
 	if (success) 
 	{
 		if (token.token_type == TOKEN_RIGHT_CURLY)
 		{
-			Json_Type json_type = {0}; 
-			json_type.type = TYPE_Object;
-			json_type.object = key_value_list;
+			return kvl_head;
 		}
 		else
 		{
@@ -752,19 +736,13 @@ parse_object(Parser *parser)
 					 parser->location.line, parser->location.character, token.text)
 		}
 	}
-	else
-	{
-		// a problem while tokenizing happened.
-		return NULL;
-	}
 	
-	node = (Json_Type *)malloc(sizeof(Json_Type)); 
-	node->object = key_value_list;
-	node->type = TYPE_Object;
 	
-	return node;
+	// a problem while tokenizing happened.
+	return NULL;
 }
 
+/* 
 internal s32
 parse_array_basic_type(Parser *parser, Token_Types token_type) 
 {
@@ -802,6 +780,32 @@ parse_array_basic_type(Parser *parser, Token_Types token_type)
 	}
 	return 0;
 }
+ */
+
+////////////////////////////////
+
+internal b32 
+array_add_element(Json_Type *arr, Json_Type elem)
+{
+	Assert(elem.type >= 0); // bad element.
+	if (!arr->array.data)  return false;
+	
+	if (arr->array.capacity <= arr->array.index) 
+	{
+		// not enough space, realloc more space.
+		// TODO(ziv): use realloc here. 
+		size_t new_size = (size_t)((f64)arr->array.capacity * 1.5f); // TODO(ziv): find a better way of finding a better number.
+		Json_Type *new_array = (Json_Type *)context.alloc(new_size);
+		memcpy(new_array, arr->array.data, arr->array.capacity);
+		arr->array.data = new_array; 
+	}
+	
+	arr->array.data[arr->array.index++] = elem;
+	return true;
+}
+
+
+////////////////////////////////
 
 internal Json_Type *
 parse_array(Parser *parser)
@@ -810,62 +814,102 @@ parse_array(Parser *parser)
     b32 success = false;
 	
 	
+	// handle empty list.
 	if (peek_next_token(parser, &token) && token.token_type == TOKEN_RIGHT_BRACKET)
 	{
-		// handle empty list.
 		get_next_token(parser, &token); // eat that token.
 		return (Json_Type *)NULL;
 	}
 	
 	
 	// create the array
-	Json_Type_Array *jt_arr = init_json_type_array();
+	Json_Type *arr = (Json_Type *)context.alloc(sizeof(Json_Type)); 
+	arr->type = TYPE_Array; 
+	arr->array.capacity = 4; 
+	arr->array.index    = 0; 
+	arr->array.data = (Json_Type *)context.alloc(sizeof(Json_Type) * arr->array.capacity);
+	
 	while (get_next_token(parser, &token)) 
 	{
-		Json_Type jt = {0};
 		
 		if (token.token_type == TOKEN_LEFT_BRACKET)    // array 
 		{
-			jt.type = TYPE_Array;
 			Json_Type *temp = parse_array(parser); 
-			if (temp) jt = *temp;
+			if (!array_add_element(arr, *temp))
+			{
+				return NULL; // out of memeory. 
+			}
+			
 		}
 		else if (token.token_type == TOKEN_LEFT_CURLY) // object
 		{
-			jt.type = TYPE_Object;
 			Json_Type *temp = parse_object(parser);
-			if (temp)  jt = *temp;
+			if (!array_add_element(arr, *temp))
+			{
+				return NULL; // out of memory.
+			}
+			
 		}
 		else if (token.token_type == TOKEN_STRING)     // string
 		{
-			jt.type = TYPE_String;
-			jt.string.size = token.text_size;
-			jt.string.data = token.text;
+			Json_Type *jt_str = (Json_Type *)context.alloc(sizeof(Json_Type)); 
+			jt_str->type = TYPE_String; 
+			jt_str->string.data = token.text; 
+			jt_str->string.size = token.text_size; 
+			if (!array_add_element(arr, *jt_str))
+			{
+				return NULL; // out of memory.
+			}
+			
 		}
 		else if (token.token_type == TOKEN_INTEGER)    // integer 
 		{
+			Json_Type *jt_int = (Json_Type *)context.alloc(sizeof(Json_Type)); 
+			jt_int->type = TYPE_Integer; 
+			
 			// create the string slice that stores the number info
 			string_slice s = {0};
 			s.size = token.text_size;
 			s.data = token.text;
 			
-			jt.type = TYPE_Integer;
-			if (!string_slice_to_integer(s, &jt.integer)) 
+			if (!string_slice_to_integer(s, &jt_int->integer)) 
 			{
 				// unsuccessful
 				LogError("error(%d:%d): internal error, could not convert a integer token to a integer", 
 						 parser->location.line, parser->location.character);
 				return NULL;
 			}
+			if (!array_add_element(arr, *jt_int))
+			{
+				return NULL; // out of memory
+			}
 			
 		}
 		else if (token.token_type == TOKEN_FLOAT)      // float
 		{
-			token.token_type = TOKEN_FLOAT;
+			Json_Type *jt_float = (Json_Type *)context.alloc(sizeof(Json_Type)); 
+			jt_float->type = TYPE_Integer; 
+			
+			// create the string slice that stores the number info
+			string_slice s = {0};
+			s.size = token.text_size;
+			s.data = token.text;
+			
+			if (!string_slice_to_integer(s, &jt_float->integer)) 
+			{
+				// unsuccessful
+				LogError("error(%d:%d): internal error, could not convert a integer token to a integer", 
+						 parser->location.line, parser->location.character);
+				return NULL;
+			}
+			if (!array_add_element(arr, *jt_float))
+			{
+				return NULL; // out of memory
+			}
+			
 		}
 		else if (token.token_type == TOKEN_RIGHT_BRACKET)
 		{
-			// end of the list
 			break;
 		}
 		else // this is an incorrect type
@@ -879,9 +923,9 @@ parse_array(Parser *parser)
 		if (peek_next_token(parser, &token) && token.token_type == TOKEN_COMMA) 
 		{
 			get_next_token(parser, &token); // go over the token
-			if (!array_add_element(jt_arr, jt)) { LogError("error: ran out of memory"); }
+			//if (!array_add_element(jt_arr, jt)) { LogError("error: ran out of memory"); }
 		}
-		else if (jt.type == 0) // unknown token. Meaning before the comma there is no type.
+		else if (arr->type == 0) // unknown token. Meaning before the comma there is no type.
 		{
 			
 			LogError("error(%d:%d): missing comma when dividing between multiple types.", 
@@ -891,14 +935,7 @@ parse_array(Parser *parser)
 		
 	}
 	
-	// create the Json_Type for the array.
-	Json_Type *jarr = (Json_Type *)context.alloc(sizeof(Json_Type));
-	jarr->type = TYPE_Array;
-	jarr->array.index    = jt_arr->index; 
-	jarr->array.capacity = jt_arr->capacity; 
-	jarr->array.data     = jt_arr->data;
-	
-	return jarr;
+	return arr; 
 }
 
 internal Json_Type *
@@ -909,31 +946,30 @@ parse_json(char *input_buffer)
 	init_global_context(4 * 1024);
 	
 	Parser parser = {0};
-	parser.text = input_buffer; 
+	parser.text   = input_buffer; 
 	parser.location.line = 1; // Most code editors begin at line 1. 
 	
-	Json_Type *node = NULL;
+	Json_Type *head = NULL; // head of the tree
 	
+	// look and see if it begins with a curly brace or a bracket.
 	Token token = {0}; 
 	b32 success = get_next_token(&parser, &token);
-	
-	// the only ways that you can start are with a jobj or a array 
 	if (token.token_type == TOKEN_LEFT_CURLY)
 	{
-		node = parse_object(&parser);
+		head = parse_object(&parser);
 	}
 	else if (token.token_type == TOKEN_LEFT_BRACKET)
 	{
-		node = parse_array(&parser);
+		head = parse_array(&parser);
 	}
 	else 
 	{
-		LogError("error parsing(%d:%d): did not find objec`t/list type at the beginning", parser.location.line, parser.location.character);
+		LogError("error parsing(%d:%d): did not find object/list type at the beginning", 
+				 parser.location.line, parser.location.character);
 	}
 	
 	// context.free();
-	
-	return node;
+	return head;
 }
 
 //

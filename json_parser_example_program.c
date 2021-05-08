@@ -11,7 +11,7 @@
 
 
 
-
+#if 0 
 // some really quick witted debug printing for the Json_Type. 
 internal void debug_print_object(Key_Value_Node *key_value_map, s32 padding_level);
 
@@ -157,7 +157,7 @@ debug_print_token(Token token)
 }
 
 // TODO(ziv): add debug print list.
-
+#endif
 
 
 int main(int argc, char **argv)
@@ -187,7 +187,6 @@ int main(int argc, char **argv)
 				Json_Type *json_tree = parse_json(buffer);
                 
 				// print the structure (visual representation)
-				debug_print_json_from_json_node(json_tree);
 				
 				// This node is the AST tree head node. 
 				//debug_print_ast_tree(ast_tree);
