@@ -3,49 +3,36 @@
 #ifndef JSON_HL_H
 #define JSON_HL_H
 
-// NOTE(ziv): The grand plan: 
-// Fix these functions first
+// TODO(ziv):
+// add support for floatingpoint number.
+// add more error messages and better ones (or rethink the who structure tho I don't recomment)
+// 
+// Features: 
+//   *have a hash table like access (e.g. a function that creates a hash table from the json tree). 
+//   *have a function that allows access like the feature above but it will not truly as fast (linear search)
+//   *maybe use more/less of the C standard library.
 
-// [x] parse_json
-// [x] parse_key_value_pair
-// [x] parse_object 
-// [ ] parse_array
-// [ ] parse_array_basic_type <- what is this??? 
-
-
-/* TODO(ziv):
-  - @working Finish the list type in the parser. 
-  Continue to add more error messages.
- Create a function that converts from my node type to a general hash table.
-
-@Cleanup for the enums as I have toom nay of them nad I don't really need it. 
-*/
+// Added support for arrays inside arrays (debug printing wise that is).
 
 //
-// Types for convenience.
+// Types
 // 
 
-// NOTE(ziv): This should get changed. This is because, 
-// I no like to override types for others. Instead,
-// the types that the project will have different name 
-// so I there will be no naming colissions.
+// TODO(ziv): change this to different names to avoid naming colissions.
 
 #include <stdint.h>
-typedef int8_t  s8; 
-typedef int16_t s16; 
-typedef int32_t s32; 
-typedef int64_t s64;
+typedef int32_t  s32;
+typedef int64_t  s64;
 
 typedef uint8_t  u8; 
-typedef uint16_t u16; 
-typedef uint32_t u32; 
+typedef uint32_t u32;
 typedef uint64_t u64;
 
-typedef int    b32; 
-typedef float  f32; 
-typedef double f64;
+typedef float    f32;
+typedef double   f64;
 
-
+// booleans 
+typedef int32_t  b32;
 #define false 0
 #define true 1
 
@@ -80,11 +67,11 @@ typedef double f64;
 #define global static
 #endif 
 
-//#define size_t s64
 
-#include <string.h> // memcpy
-#include <stdio.h>  // printf, fopen..
-#include <stdlib.h> // malloc
+#include <string.h>
+#include <stdio.h> 
+#include <stdlib.h>
+
 
 ////////////////////////////////
 // 
@@ -204,17 +191,6 @@ json_memory_alloc(s32 requested_size)
 	}
 }
 
-// TODO(ziv): evaluate whether I truly need this !!! 
-
-/* 
-internal void *
-json_memory_realloc(const void *old_memory, size_t old_size, size_t new_size)
-{
-	
-	
-}
- */
-
 internal void
 json_memory_free()
 {
@@ -299,7 +275,10 @@ static char *token_name_map[TOKEN_COUNT];
 internal void
 init_token_to_string_map()
 {
-    token_name_map[TOKEN_LEFT_CURLY]    = "LEFT_CURLY"; 
+	// all of tokens that I currently support, 
+	// maped to a string represeting it. 
+    
+	token_name_map[TOKEN_LEFT_CURLY]    = "LEFT_CURLY"; 
     token_name_map[TOKEN_RIGHT_CURLY]   = "RIGHT_CURLY"; 
     token_name_map[TOKEN_RIGHT_BRACKET] = "RIGHT_BRACKET"; 
     token_name_map[TOKEN_LEFT_BRACKET]  = "LEFT_BRACKET"; 
@@ -321,9 +300,6 @@ internal b32 peek_next_token(Parser *parser,    // does not advance the parsers 
 							 Token *token_out); // the token will get put here.
 // If there is no token (or it is unknown), it returns 0.
 
-internal void debug_print_token(Token token); // prints the token given.
-
-
 ////////////////////////////////
 //
 // Parsing
@@ -340,32 +316,6 @@ typedef enum Simple_Types
 	TYPE_Null    = 32
 } Simple_Types;
 
-typedef struct Key_Value_Node
-{
-    char *key;   // key 
-    void *value; // value of any type that the enum Value_Type has. 
-	Simple_Types value_type_flag;  // flags are of type Value_Type that tell what type is the value.
-    struct Key_Value_Node *next; 
-} Key_Value_Node;
-
-typedef struct Key_Value_List
-{
-    Key_Value_Node *head; 
-    Key_Value_Node *tail;
-} Key_Value_List;
-
-internal Key_Value_Node *
-init_key_value_node()
-{
-    Key_Value_Node *key_value_map = (Key_Value_Node *)context.alloc(sizeof(Key_Value_Node)); 
-    key_value_map->key = NULL; 
-    key_value_map->value = NULL; 
-    key_value_map->value_type_flag = (Simple_Types)0; 
-    key_value_map->next = NULL;
-    return key_value_map;
-}
-
-
 typedef struct Json_Type
 {
 	Simple_Types type;
@@ -379,7 +329,7 @@ typedef struct Json_Type
 		} array; 
 		
 		struct {
-			char *key; 
+			string_slice key; 
 			struct Json_Type *value;
 			struct Json_Type *next;
 		} object;
@@ -394,12 +344,13 @@ typedef struct Json_Type
 // The following functions parse known types. 
 // They handle their own errors, and return NULL 
 // when an error has occored. 
-internal Json_Type  *parse_key_value_pair(Parser *parser);
-internal Json_Type       *parse_object(Parser *parser);
-internal Json_Type       *parse_array(Parser *parser);
-internal Json_Type       *parse_json(char *input_buffer);
+internal Json_Type *parse_key_value_pair(Parser *parser);
+internal Json_Type *parse_object(Parser *parser);
+internal Json_Type *parse_array(Parser *parser);
+internal Json_Type *parse_json(char *input_buffer);
 
-internal b32              string_slice_to_integer(string_slice number, size_t *result);
+internal b32 string_slice_to_integer(string_slice number, size_t *result);
+internal b32 string_slice_to_float(string_slice number, f32 *result);
 
 ////////////////////////////////
 
@@ -500,6 +451,7 @@ success = true;                             \
                 parser->location.index++;
             }
             token_out->text = slice_to_string(slice_buffer);
+			token_out->text_size = slice_buffer.size;
             token_out->token_type = TOKEN_FLOAT;
             success = true;
         }
@@ -531,6 +483,7 @@ success = true;                             \
                 else
                 {
 					token_out->text = slice_to_string(slice_buffer); 
+					token_out->text_size = slice_buffer.size; 
 					token_out->token_type = TOKEN_INTEGER;
 					success = true;
 					//LogError("error tokenizing(%d:%d): unknown type to handle. parser is unable to understand what is going on, aka this is a bug. ",
@@ -557,7 +510,8 @@ success = true;                             \
 			   trash_token.token_type == TOKEN_UNKNOWN)
         {
 			// TODO(ziv): Fix the seemingly infinite call to the function as it creates a stackoverflow error.
-            get_next_token(parser, &trash_token); // eat the token. 
+            // IMPORTANT(ziv): DO THIS PLEASE !!! 
+			get_next_token(parser, &trash_token); // eat the token. 
 			dest_text[character_index++] = *trash_token.text; 
 			if (character_index > MAX_BUFFER_SIZE)
 			{
@@ -569,10 +523,6 @@ success = true;                             \
     
     // synces the out token location.  
     token_out->location = parser->location; 
-    
-#if DEBUG
-    debug_print_token(*token_out);
-#endif
     
     return success;
 }
@@ -604,7 +554,11 @@ parse_key_value_pair(Parser *parser)
 	//
     if (token.token_type == TOKEN_STRING)
     {
-        kvp->object.key = token.text;
+		string_slice s; 
+		s.data = token.text; 
+		s.size = token.text_size;
+        kvp->object.key = s;
+		
     }
     else 
     {
@@ -620,7 +574,7 @@ parse_key_value_pair(Parser *parser)
     if (token.token_type != TOKEN_COLON) 
     {
         LogError("error parsing(%d:%d): inside an object, after key '%s' expected COLON, got '%s'.", 
-                 parser->location.line, parser->location.character, kvp->object.key, token.text);
+                 parser->location.line, parser->location.character, kvp->object.key.data, token.text);
         return NULL;
     }
 	
@@ -785,7 +739,7 @@ parse_array(Parser *parser)
 	// create the array
 	Json_Type *arr = (Json_Type *)context.alloc(sizeof(Json_Type)); 
 	arr->type = TYPE_Array; 
-	arr->array.capacity = 4; 
+	arr->array.capacity = 10; 
 	arr->array.index    = 0; 
 	arr->array.data = (Json_Type *)context.alloc(sizeof(Json_Type) * arr->array.capacity);
 	
@@ -890,11 +844,10 @@ parse_array(Parser *parser)
 			
 			LogError("error(%d:%d): missing comma when dividing between multiple types.", 
 					 parser->location.line, parser->location.character); 
-			return NULL;
+			return arr;
 		}
 		
 	}
-	
 	return arr; 
 }
 
@@ -928,7 +881,6 @@ parse_json(char *input_buffer)
 				 parser.location.line, parser.location.character);
 	}
 	
-	// context.free();
 	return head;
 }
 
@@ -1012,7 +964,7 @@ strmerge(char *dest, s32 dest_size,
 internal b32
 string_slice_to_integer(string_slice number, size_t *result)
 {
-	Assert(number.data == null); // I expect to get valid data.
+	Assert(number.data != NULL); // I expect to get valid data.
 	if (!result || !number.data) return 0;
 	
 	size_t number_length = number.capacity;
@@ -1028,7 +980,6 @@ string_slice_to_integer(string_slice number, size_t *result)
 	
 	if (number_length > MAX_NUM_CHARACTER_LENGTH)  return 0; // character length is too large. 
 	
-	// TODO(ziv): use a function like pow? 
 	u32 exp = number_length-1;
 	for (u32 exp_counter = 0; exp_counter < exp; exp_counter++) { pos *= 10; } // 10^exp 
 	
@@ -1062,7 +1013,7 @@ string_slice_to_integer(string_slice number, size_t *result)
 			s32 units = to_number(*str);
 			if (units > JSON_INT_MAX % 10)
 			{
-				return 0;
+				return false;
 			}
 			number_as_integer *= 10; 
 			number_as_integer += units;
@@ -1086,6 +1037,12 @@ string_slice_to_integer(string_slice number, size_t *result)
 	
 	*result = number_as_integer;
 	return true;
+}
+
+internal b32 
+string_slice_to_float(string_slice number, f64 *result)
+{
+	
 }
 
 
