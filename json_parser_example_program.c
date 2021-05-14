@@ -143,6 +143,10 @@ debug_print_array(Json_Type *arr, s32 padding_level)
 		{
 			debug_print_object(arr->array.data+i, padding_level + 1);
 		}
+		else if (type == TYPE_Array)
+		{
+			debug_print_array(arr->array.data+i, padding_level +1);
+		}
 		
 	}
 	
@@ -214,7 +218,7 @@ int main(int argc, char **argv)
                 buffer[file_size] = '\0'; // null terminate the file.
                 
 				// prints out the file contents.
-                //fprintf(stdout, "Json data:\n%s\n\n", buffer);
+                fprintf(stdout, "Json data:\n%s\n\n", buffer);
                 
                 fclose(file);
                 

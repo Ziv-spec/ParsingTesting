@@ -4,21 +4,29 @@
 #define JSON_HL_H
 
 // TODO(ziv):
-// add support for floatingpoint number.
-// add more error messages and better ones (or rethink the who structure tho I don't recomment)
+// Fix the memory issues regarding the arrays. 
+// When I do array inside a array, a memory corruption
+// happens every time that I do so. 
+//
+// Add support for booleans as they are a standart type that I should support.
+//
+// make the arrays expan as they currenly do not.
+// fix the context please as it is currently not functioning correctly. 
 // 
 // Features: 
 //   *have a hash table like access (e.g. a function that creates a hash table from the json tree). 
 //   *have a function that allows access like the feature above but it will not truly as fast (linear search)
 //   *maybe use more/less of the C standard library.
+//   *add more error messages and better ones (or rethink the who structure tho I don't recomment) 
 
-// Added support for arrays inside arrays (debug printing wise that is).
+// TODO(ziv): To make this a true single header library 
+// it is required to change the types to different names 
+// to avoid naming colissions with others projects. 
+// But this is last on my priority list.
 
 //
 // Types
 // 
-
-// TODO(ziv): change this to different names to avoid naming colissions.
 
 #include <stdint.h>
 typedef int32_t  s32;
@@ -26,7 +34,7 @@ typedef int64_t  s64;
 
 typedef uint8_t  u8; 
 typedef uint32_t u32;
-typedef uint64_t u64;
+typedef uint64_t u64; // NOTE(ziv): not used
 
 typedef float    f32;
 typedef double   f64;
@@ -138,8 +146,8 @@ internal b32 error_showed; // a global variable that allows or disables output o
 typedef struct Memory_Block
 {
 	struct Memory_Block *next; // next memory pool.
-	size_t buffer_capacity;   // size of the memory buffer.
-	size_t offset;            // where the last allocation happened.
+	size_t buffer_capacity;    // size of the memory buffer.
+	size_t offset;             // where the last allocation happened.
 	void   *buffer;            // memory buffer. 
 } Memory_Block;
 
@@ -174,21 +182,22 @@ json_memory_alloc(s32 requested_size)
 		last_block->offset += requested_size; 
 		return requested_memory;
 	}
-	else // not enough space in the buffer, there is a need for a new allocation. 
+	
+	// not enough space in the buffer, there is a need for a new allocation. 
+	
+	// NOTE(ziv): probably can make this one allocation instead of two. 
+	Memory_Block *memory_block = (Memory_Block *)malloc(sizeof(Memory_Block)); 
+	memory_block->next = NULL; 
+	memory_block->buffer_capacity = context.allocation_size; 
+	memory_block->offset = requested_size; 
+	memory_block->buffer = malloc(context.allocation_size);
+	if (memory_block && memory_block->buffer)
 	{
-		Memory_Block *memory_block = (Memory_Block *)malloc(sizeof(Memory_Block));
-		if (memory_block)
-		{
-			context.memory.tail->next   = memory_block;  
-			context.memory.tail->buffer = malloc(context.allocation_size);
-			return memory_block;
-		}
-		else 
-		{
-			// cannot allocate memory.
-			return NULL;
-		}
+		context.memory.tail->next = memory_block;
+		context.memory.tail = context.memory.tail->next;
+		return memory_block->buffer;
 	}
+	return NULL;
 }
 
 internal void
@@ -200,11 +209,13 @@ json_memory_free()
 	while (block->next)
 	{
 		next_block = block->next;
+		free(block->buffer);
 		free(block); 
 		block = next_block;
 	}
 	if (block)
 	{
+		free(block->buffer);
 		free(block);
 	}
 	
@@ -220,7 +231,8 @@ init_global_context(s32 block_size)
 	
 	s32 total_allocation_size = sizeof(Memory_Block) + context.allocation_size;
 	context.memory.head = (Memory_Block *)malloc(total_allocation_size);
-	*context.memory.head = {0};
+	context.memory.head->next = NULL;
+	context.memory.head->offset = 0;
 	context.memory.head->buffer_capacity = context.allocation_size;
 	context.memory.head->buffer = (u8 *)context.memory.head + sizeof(Memory_Block); 
 	context.memory.tail = context.memory.head;
@@ -326,7 +338,7 @@ typedef struct Json_Type
 			size_t capacity;
 			size_t index;
 			Json_Type *data;
-		} array; 
+		} array;
 		
 		struct {
 			string_slice key; 
@@ -345,12 +357,12 @@ typedef struct Json_Type
 // They handle their own errors, and return NULL 
 // when an error has occored. 
 internal Json_Type *parse_key_value_pair(Parser *parser);
-internal Json_Type *parse_object(Parser *parser);
-internal Json_Type *parse_array(Parser *parser);
+internal b32 parse_object(Parser *parser, Json_Type *jt_object);
+internal b32 parse_array(Parser *parser,  Json_Type *jt_array);
 internal Json_Type *parse_json(char *input_buffer);
 
 internal b32 string_slice_to_integer(string_slice number, size_t *result);
-internal b32 string_slice_to_float(string_slice number, f32 *result);
+internal b32 string_slice_to_float(string_slice number, double *result);
 
 ////////////////////////////////
 
@@ -549,27 +561,20 @@ parse_key_value_pair(Parser *parser)
 	kvp->type = TYPE_Object; 
 	kvp->object.next = NULL;
 	
-	//
-	// checks for a key
-	//
-    if (token.token_type == TOKEN_STRING)
-    {
-		string_slice s; 
-		s.data = token.text; 
-		s.size = token.text_size;
-        kvp->object.key = s;
-		
-    }
-    else 
+	// checks if there is a key
+    if (token.token_type != TOKEN_STRING)
     {
         LogError("error parsing(%d:%d): inside a object expected a key of type 'STRING', got type '%s'.", 
                  parser->location.line, parser->location.character, token_name_map[token.token_type]); 
         return NULL;
-    }
-    
-	//
+	}
+	// it exists
+	string_slice s; 
+	s.data = token.text; 
+	s.size = token.text_size;
+	kvp->object.key = s; 
+	
 	// check if there is a colon 
-	//
     if (!get_next_token(parser, &token))  return NULL;
     if (token.token_type != TOKEN_COLON) 
     {
@@ -578,27 +583,30 @@ parse_key_value_pair(Parser *parser)
         return NULL;
     }
 	
-    //
     // checks for a value
-	//
-	
 	if (get_next_token(parser, &token))
 	{
-		// try to figure out the type.
-		
-		if (token.token_type == TOKEN_LEFT_CURLY)
+		kvp->object.value = (Json_Type *)context.alloc(sizeof(Json_Type));
+		if (token.token_type == TOKEN_LEFT_CURLY)       // object
 		{
-			kvp->object.value = parse_object(parser);
-			return kvp;
+			kvp->object.value->object.value = NULL; 
+			kvp->object.value->object.next  = NULL;
+			if (parse_object(parser, kvp->object.value))
+				return kvp;
+			return NULL;
 		}
-		else if (token.token_type == TOKEN_LEFT_BRACKET)
+		else if (token.token_type == TOKEN_LEFT_BRACKET) // array
 		{
-			kvp->object.value = parse_array(parser);
-			return kvp;
+			kvp->object.value->array.data     = NULL; 
+			kvp->object.value->array.capacity = 0;
+			kvp->object.value->array.index    = 0;
+			if (parse_array(parser, kvp->object.value)) 
+				return kvp;
+			return NULL;
 		}
 		
-		kvp->object.value = (Json_Type *)context.alloc(sizeof(Json_Type)); 
-		Json_Type *value  = kvp->object.value;
+		// simple value
+		Json_Type *value   = kvp->object.value;
 		value->object.next = NULL;
 		
 		string_slice s; 
@@ -607,7 +615,7 @@ parse_key_value_pair(Parser *parser)
 		
 		if (token.token_type == TOKEN_STRING) 
 		{
-			value->type = TYPE_String;
+			value->type   = TYPE_String;
 			value->string = s;
 		}
 		else if (token.token_type == TOKEN_INTEGER)
@@ -622,8 +630,14 @@ parse_key_value_pair(Parser *parser)
 		}
 		else if (token.token_type == TOKEN_FLOAT)
 		{
-			value->type = TYPE_Float; 
-			value->floating_point = 0.4f; // some garbage value until I implement the conversion between string and floating point  
+			value->type = TYPE_Float;
+			string_slice s; 
+			s.data = token.text; 
+			s.size = token.text_size; 
+			if (!string_slice_to_float(s, &value->floating_point))
+			{
+				return NULL;
+			}
 			
 		}
 		else 
@@ -637,12 +651,10 @@ parse_key_value_pair(Parser *parser)
 	return kvp;
 }
 
-internal Json_Type *
-parse_object(Parser *parser)
+internal b32
+parse_object(Parser *parser, Json_Type *jt_object)
 {
-    b32 success = false;
-	Json_Type *node = NULL;
-	
+	b32 success = false;
 	Token token; 
 	
 	// empty object.
@@ -650,12 +662,11 @@ parse_object(Parser *parser)
 		token.token_type == TOKEN_RIGHT_CURLY)
 	{
 		get_next_token(parser, &token); // eat the token
-		return NULL;
+		return false;
 	}
 	
-	
 	Json_Type *kvl_head = parse_key_value_pair(parser);
-	if (!kvl_head) return NULL; // error managed by parse_key_value_pair
+	if (!kvl_head) return false; 
 	
 	Json_Type *kvp = NULL;
     success = get_next_token(parser, &token);
@@ -682,7 +693,8 @@ parse_object(Parser *parser)
 	{
 		if (token.token_type == TOKEN_RIGHT_CURLY)
 		{
-			return kvl_head;
+			*jt_object = *kvl_head; 
+			return true;
 		}
 		else
 		{
@@ -691,9 +703,7 @@ parse_object(Parser *parser)
 		}
 	}
 	
-	
-	// a problem while tokenizing happened.
-	return NULL;
+	return false;
 }
 
 ////////////////////////////////
@@ -701,14 +711,15 @@ parse_object(Parser *parser)
 internal b32 
 array_add_element(Json_Type *arr, Json_Type elem)
 {
-	Assert(elem.type >= 0); // bad element.
+	Assert(arr->type == TYPE_Array);
+	Assert(elem.type > 0); // bad element.
 	if (!arr->array.data)  return false;
 	
 	if (arr->array.capacity <= arr->array.index) 
 	{
 		// not enough space, realloc more space.
 		// TODO(ziv): use realloc here. 
-		size_t new_size = (size_t)((f64)arr->array.capacity * 1.5f); // TODO(ziv): find a better way of finding a better number.
+		size_t new_size = (size_t)((f64)arr->array.capacity		* 1.5f); // TODO(ziv): find a better way of finding a better number.
 		Json_Type *new_array = (Json_Type *)context.alloc(new_size);
 		memcpy(new_array, arr->array.data, arr->array.capacity);
 		arr->array.data = new_array; 
@@ -718,111 +729,93 @@ array_add_element(Json_Type *arr, Json_Type elem)
 	return true;
 }
 
-
 ////////////////////////////////
 
-internal Json_Type *
-parse_array(Parser *parser)
+internal b32
+parse_array(Parser *parser, Json_Type *jt_array)
 {
 	Token token; 
     b32 success = false;
-	
 	
 	// handle empty list.
 	if (peek_next_token(parser, &token) && token.token_type == TOKEN_RIGHT_BRACKET)
 	{
 		get_next_token(parser, &token); // eat that token.
-		return (Json_Type *)NULL;
+		return false;
 	}
 	
-	
 	// create the array
-	Json_Type *arr = (Json_Type *)context.alloc(sizeof(Json_Type)); 
-	arr->type = TYPE_Array; 
-	arr->array.capacity = 10; 
-	arr->array.index    = 0; 
-	arr->array.data = (Json_Type *)context.alloc(sizeof(Json_Type) * arr->array.capacity);
+	jt_array->type = TYPE_Array; 
+	jt_array->array.capacity = 50; 
+	jt_array->array.index    = 0; 
+	jt_array->array.data = (Json_Type *)context.alloc(sizeof(Json_Type) * jt_array->array.capacity);
 	
 	while (get_next_token(parser, &token)) 
 	{
 		
 		if (token.token_type == TOKEN_LEFT_BRACKET)    // array 
 		{
-			Json_Type *temp = parse_array(parser); 
-			if (!array_add_element(arr, *temp))
-			{
-				return NULL; // out of memeory. 
-			}
+			Json_Type temp_arr = {0};
+			if (!parse_array(parser, &temp_arr))        return false; // could not parse the array
+			if (!array_add_element(jt_array, temp_arr)) return false; // out of memeory.
 			
 		}
 		else if (token.token_type == TOKEN_LEFT_CURLY) // object
 		{
-			Json_Type *temp = parse_object(parser);
-			if (!array_add_element(arr, *temp))
-			{
-				return NULL; // out of memory.
-			}
+			Json_Type temp_object = {0};
+			if (!parse_object(parser, &temp_object))       return false; // could not parse the object
+			if (!array_add_element(jt_array, temp_object)) return false; // out of memory.
 			
 		}
 		else if (token.token_type == TOKEN_STRING)     // string
 		{
-			Json_Type *jt_str = (Json_Type *)context.alloc(sizeof(Json_Type)); 
-			jt_str->type = TYPE_String; 
-			jt_str->string.data = token.text; 
-			jt_str->string.size = token.text_size; 
-			if (!array_add_element(arr, *jt_str))
-			{
-				return NULL; // out of memory.
-			}
+			Json_Type jt_str = {0};
+			jt_str.type = TYPE_String; 
+			jt_str.string.data = token.text; 
+			jt_str.string.size = token.text_size; 
+			if (!array_add_element(jt_array, jt_str)) return false; // out of memory.
 			
 		}
 		else if (token.token_type == TOKEN_INTEGER)    // integer 
 		{
-			Json_Type *jt_int = (Json_Type *)context.alloc(sizeof(Json_Type)); 
-			jt_int->type = TYPE_Integer; 
+			Json_Type jt_int = {0};
+			jt_int.type = TYPE_Integer; 
 			
 			// create the string slice that stores the number info
 			string_slice s = {0};
 			s.size = token.text_size;
 			s.data = token.text;
-			
-			if (!string_slice_to_integer(s, &jt_int->integer)) 
+			if (!string_slice_to_integer(s, &jt_int.integer)) 
 			{
-				// unsuccessful
 				LogError("error(%d:%d): internal error, could not convert a integer token to a integer", 
 						 parser->location.line, parser->location.character);
-				return NULL;
+				return NULL; // unable to convert to integer
 			}
-			if (!array_add_element(arr, *jt_int))
-			{
-				return NULL; // out of memory
-			}
+			
+			if (!array_add_element(jt_array, jt_int)) return false; // out of memory
 			
 		}
 		else if (token.token_type == TOKEN_FLOAT)      // float
 		{
-			Json_Type *jt_float = (Json_Type *)context.alloc(sizeof(Json_Type)); 
-			jt_float->type = TYPE_Integer; 
+			Json_Type jt_float = {0}; 
+			jt_float.type = TYPE_Float; 
 			
 			// create the string slice that stores the number info
 			string_slice s = {0};
 			s.size = token.text_size;
 			s.data = token.text;
-			
-			if (!string_slice_to_integer(s, &jt_float->integer)) 
+			if (!string_slice_to_float(s, &jt_float.floating_point)) 
 			{
 				// unsuccessful
 				LogError("error(%d:%d): internal error, could not convert a integer token to a integer", 
 						 parser->location.line, parser->location.character);
-				return NULL;
-			}
-			if (!array_add_element(arr, *jt_float))
-			{
-				return NULL; // out of memory
+				return false;
 			}
 			
+			if (!array_add_element(jt_array, jt_float)) return false; // out of memory
+			
 		}
-		else if (token.token_type == TOKEN_RIGHT_BRACKET)
+		else if (token.token_type == TOKEN_RIGHT_BRACKET) 
 		{
 			break;
 		}
@@ -830,25 +823,25 @@ parse_array(Parser *parser)
 		{
 			LogError("error(%d:%d): unknown type found %d.",
 					 parser->location.line, parser->location.character, (int)token.token_type);  
-			return NULL;
+			return false;
 		}
 		
-		// Add the element to the list.
 		if (peek_next_token(parser, &token) && token.token_type == TOKEN_COMMA) 
 		{
 			get_next_token(parser, &token); // go over the token
-			//if (!array_add_element(jt_arr, jt)) { LogError("error: ran out of memory"); }
 		}
-		else if (arr->type == 0) // unknown token. Meaning before the comma there is no type.
+		else if (!(token.token_type & (TOKEN_RIGHT_BRACKET | TOKEN_RIGHT_CURLY | 
+									   TOKEN_FLOAT | TOKEN_INTEGER | TOKEN_STRING)))
 		{
 			
 			LogError("error(%d:%d): missing comma when dividing between multiple types.", 
 					 parser->location.line, parser->location.character); 
-			return arr;
+			return false;
 		}
 		
 	}
-	return arr; 
+	
+	return true; 
 }
 
 internal Json_Type *
@@ -862,18 +855,18 @@ parse_json(char *input_buffer)
 	parser.text   = input_buffer; 
 	parser.location.line = 1; // Most code editors begin at line 1. 
 	
-	Json_Type *head = NULL; // head of the tree
+	Json_Type *head = (Json_Type *)context.alloc(sizeof(Json_Type));
 	
 	// look and see if it begins with a curly brace or a bracket.
 	Token token = {0}; 
 	b32 success = get_next_token(&parser, &token);
 	if (token.token_type == TOKEN_LEFT_CURLY)
 	{
-		head = parse_object(&parser);
+		if (!parse_object(&parser, head)) return NULL;
 	}
 	else if (token.token_type == TOKEN_LEFT_BRACKET)
 	{
-		head = parse_array(&parser);
+		if (!parse_array(&parser, head)) return NULL;
 	}
 	else 
 	{
@@ -951,100 +944,76 @@ strmerge(char *dest, s32 dest_size,
 }
 
 
-
-#if UINTPTR_MAX == 0xffffffff           /* 32-bit */
-#define MAX_NUM_CHARACTER_LENGTH 10
-#define JSON_INT_MAX INT32_MAX
-#elif UINTPTR_MAX == 0xffffffffffffffff /* 64-bit */
-#define MAX_NUM_CHARACTER_LENGTH 20
-#define JSON_INT_MAX INT64_MAX
-#else                                   /*  wtf   */
-#endif
-
 internal b32
-string_slice_to_integer(string_slice number, size_t *result)
+string_slice_to_integer(string number, size_t *result)
 {
-	Assert(number.data != NULL); // I expect to get valid data.
-	if (!result || !number.data) return 0;
+	Assert(result || number.data || number.size > 1); // I expect to get valid data.
 	
-	size_t number_length = number.capacity;
-	size_t pos = 1; // positions the numbers as they should. Used later.
+	unsigned long long ival= 0 , i = 0, oval; 
+	u8 n = 1, c = number.data[i]; 
 	
-	char *str = number.data;
-	if (*str == '-')
+	if (c == '-' || c == '+') 
+	{ 
+		n = ((c == '-') ? -1:1);
+		i++;
+	} 
+	
+	u32 index = 0;
+	while ((c = number.data[i++]) && index < number.size)
 	{
-		pos           = -1; // make the number be negative (the pos will get multiplied with the number)
-		number_length = number.capacity - 1; // because the character '-' is no longer taken into account
-		str++; // skip the '-'
-	}
-	
-	if (number_length > MAX_NUM_CHARACTER_LENGTH)  return 0; // character length is too large. 
-	
-	u32 exp = number_length-1;
-	for (u32 exp_counter = 0; exp_counter < exp; exp_counter++) { pos *= 10; } // 10^exp 
-	
-	size_t number_as_integer = 0; // the generated number
-	if (number_length == MAX_NUM_CHARACTER_LENGTH) 
-	{
-		
-		// 
-		// Do checks for overflows after we compute almost all of the number
-		// 
-		
-		pos /= 10; // we don't want the units.
-		
-		s32 temp_number = 0;
-		s32 char_index  = 0;
-		while((number.capacity-1) > char_index && 
-			  *str && 
-			  is_number(*str))
-		{
-			
-			temp_number = to_number(*str);
-			number_as_integer += temp_number * pos;
-			
-			pos /= 10; str++; char_index++;
+		if (!is_number(c)) {
+			LogError("error integer");
+			return false; 
 		}
-		
-		if (number_as_integer > (JSON_INT_MAX / 10))  return 0; // there is an overflow. 
-		
-		if (number.capacity > char_index && *str && is_number(*str)) 
+		ival = (ival * 10) + (c - '0'); 
+		if ((n > 0 && ival > (size_t)-1)
+			|| (n < 0 && ival > (1 << 31)))
 		{
-			s32 units = to_number(*str);
-			if (units > JSON_INT_MAX % 10)
-			{
-				return false;
-			}
-			number_as_integer *= 10; 
-			number_as_integer += units;
+			LogError("error integer");
+			errno = ERANGE;  // TODO(ziv): check what is this doing.
+			*result = (n > 0 ? LONG_MAX : LONG_MIN); 
+			return false;
 		}
+		index++;
 	}
-	else
-	{
-		s32 temp_number = 0;
-		for (s32 char_index = 0; 
-			 number.capacity > char_index && 
-			 *str && is_number(*str); )
-		{
-			
-			temp_number = to_number(*str);
-			number_as_integer += temp_number * pos;
-			pos /= 10;
-			
-			str++; char_index++;
-		}
-	}
-	
-	*result = number_as_integer;
+	*result = (n > 0 ? (long)ival : -(long)ival); 
 	return true;
 }
 
 internal b32 
-string_slice_to_float(string_slice number, f64 *result)
+string_slice_to_float(string_slice number, double *result)
 {
+	Assert(result || number.data || number.size > 1); 
 	
+	u32 sign = 1; 
+	
+	string s; 
+	s.data  = number.data; 
+	s.index = 0; 
+	
+	// get the non-decimal number
+	u32 i = 0;
+	while (i < number.size && number.data[i] != '.') i++; 
+	s.index = i; 
+	size_t num; 
+	if (!string_slice_to_integer(s, &num)) return false;
+	
+	// get the decimal number
+	s.data = s.data + i + 1; 
+	s32 decimal_size = s.index;
+	i = s.index; 
+	while (i < number.size) i++;
+	s.index = i; 
+	size_t decimal; 
+	if (!string_slice_to_integer(s, &decimal)) return false; 
+	decimal_size = i - decimal_size; 
+	
+	// combine to a number
+	double pow = 1; 
+	for (u32 index = 0; index < decimal_size-1; index++) pow *= 10.0;
+	*result = (double)num + ((double)decimal/(double)pow);
+	return true;
 }
 
 
 #endif //JSON_HL_H
-
