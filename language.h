@@ -74,8 +74,6 @@ typedef struct String_Buffer
 } String_Buffer;
 
 
-// TODO(ziv): REDO THIS PLEASE !!! I don't like how it is currently, and so, it should be refactored.
-
 internal void
 default_string_to_slice(char *buffer, string slice)
 {

@@ -47,7 +47,17 @@ debug_print_value(Json_Type *value, s32 padding_level)
 		{
 			debug_print_array(value, padding_level);
 		}
-		
+		else if (value->type == TYPE_Bool)
+		{
+			if (value->boolean) 
+			{
+				Log("true");
+			}
+			else
+			{
+				Log("false");
+			}
+		}
 	}
 }
 

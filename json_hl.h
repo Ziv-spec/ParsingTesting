@@ -4,14 +4,8 @@
 #define JSON_HL_H
 
 // TODO(ziv):
-// Fix the memory issues regarding the arrays. 
-// When I do array inside a array, a memory corruption
-// happens every time that I do so. 
-//
-// Add support for booleans as they are a standart type that I should support.
-//
 // make the arrays expan as they currenly do not.
-// fix the context please as it is currently not functioning correctly. 
+// fix the context please as it is currently not functioning correctly.
 // 
 // Features: 
 //   *have a hash table like access (e.g. a function that creates a hash table from the json tree). 
@@ -270,7 +264,8 @@ typedef enum Token_Types // all characters known to the parser.
     TOKEN_INTEGER       = 128, // 8x0
     TOKEN_STRING        = 256, // 10x0 
     TOKEN_FLOAT         = 512, // 20x0
-    TOKEN_NONE          = 1024 // 40x0
+    TOKEN_BOOL          = 1024,// 40x0
+	TOKEN_NONE          = 2048 // 80x0
 } Token_Types;
 
 typedef struct Token
@@ -325,7 +320,8 @@ typedef enum Simple_Types
 	TYPE_Integer = 8, 
 	TYPE_Object  = 4, 
 	TYPE_Array   = 16, 
-	TYPE_Null    = 32
+	TYPE_Bool    = 32,
+	TYPE_Null    = 64
 } Simple_Types;
 
 typedef struct Json_Type
@@ -349,7 +345,10 @@ typedef struct Json_Type
 		string_slice string;
 		
 		size_t integer;
+		
 		double floating_point;
+		
+		b32 boolean;
 	};
 } Json_Type; 
 
@@ -505,6 +504,48 @@ success = true;                             \
             
         }
     }
+	else if (*cursor == 'f' || *cursor == 't')
+	{
+		if (*cursor == 'f') // expecting "false"
+		{
+			char *boolean_false = "false";
+			s32 boolean_false_size = string_size(boolean_false); 
+			s32 index = 0;
+			
+			// check if boolean false
+			while (boolean_false[index] && *cursor && 
+				   boolean_false[index] == *cursor)
+			{
+				parser->location.index++;
+				index++;
+			}
+			if (index < boolean_false_size) return false;
+			
+			token_out->text      = boolean_false; 
+			token_out->text_size = boolean_false_size; 
+		}
+		else if (*cursor = 't') // "expecting "true"
+		{
+			char *boolean_true = "true";
+			s32 boolean_true_size = string_size(boolean_true); 
+			s32 size = 0;
+			
+			// check if boolean true
+			while (boolean_true[parser->location.index] && *cursor && 
+				   boolean_true[parser->location.index] == *cursor)
+			{
+				parser->location.index++;
+				size++;
+			}
+			if (size < boolean_true_size) return true;
+			token_out->text      = boolean_true; 
+			token_out->text_size = boolean_true_size; 
+		}
+		
+		token_out->token_type = TOKEN_BOOL;
+		success = true;
+		
+	}
     else if (*cursor == '\0')
     {
         token_out->token_type = TOKEN_NONE;
@@ -638,6 +679,12 @@ parse_key_value_pair(Parser *parser)
 			{
 				return NULL;
 			}
+			
+		}
+		else if (token.token_type == TOKEN_BOOL)
+		{
+			value->type = TYPE_Bool; 
+			value->boolean = token.text[0] == 't';
 			
 		}
 		else 
