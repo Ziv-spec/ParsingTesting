@@ -3,24 +3,28 @@
 #ifndef JSON_HL_H
 #define JSON_HL_H
 
-// TODO(ziv):
-// fix the context please as it is currently not functioning
-// correctly.
-// make the arrays expan as they currenly do not using the 
-// fixed context
+// TODO(ziv): To make this a true single header library 
+// it is required to change the types to different names 
+// to avoid naming colissions with others projects. 
+// But this is last on my priority list.
+
+// -- Issues -- 
 //
 // cleanup of some tokens that are not needed like TOKEN_NONE 
 // and so on...
 //
-// add error messages where I forgot to (boolean, ...)
-// 
+
+// TODO(ziv): nice to haves: 
+//
 // maybe have a key_value_pair representation in the Json_Type 
 // such that a object is just a couple of key_value_pair's 
 // connected to each other instead of them all being objects 
 // as it might be confusing for others or something (but that 
 // remains to be seen). 
 //
-// Features אto maybe add:
+
+
+// -- Features אto maybe add --
 //   *have a hash table like access (e.g. a function that creates 
 //    a hash table from the json tree). 
 //
@@ -34,25 +38,14 @@
 //    structure though I don't recomment because error messages are
 //    not that important in this instance).
 
-// TODO(ziv): To make this a true single header library 
-// it is required to change the types to different names 
-// to avoid naming colissions with others projects. 
-// But this is last on my priority list.
-
 //
 // Types
 // 
 
 #include <stdint.h>
 typedef int32_t  s32;
-typedef int64_t  s64;
-
-typedef uint8_t  u8; 
 typedef uint32_t u32;
-typedef uint64_t u64; // NOTE(ziv): not used
-
-typedef float    f32;
-typedef double   f64;
+typedef uint8_t  u8; 
 
 // booleans 
 typedef int32_t  b32;
@@ -60,7 +53,7 @@ typedef int32_t  b32;
 #define true 1
 
 #if DEBUG
-#define Assert(expression) if(!(expression)) { *(int *)0 = 0; }
+#define Assert(expression) if(!(expression)) { *(int *)NULL = 0; }
 #else
 #define Assert(expression)
 #endif
@@ -165,9 +158,6 @@ typedef struct Memory_Pool
 
 typedef struct Context
 {
-	void *(*alloc)(s32);   // function for allocating memory. 
-	void  (*free)(void);   // function for freeing the allocated memory.
-	void *(*realloc)(void *, size_t); // function for reallcating memory.
 	Memory_Pool memory;    // the default memory pool
 	s32   allocation_size; // the default size for each block of memory.
 } Context; 
@@ -177,7 +167,7 @@ global Context context;
 //internal void init_global_context(s32 pool_size); 
 
 internal void *
-json_memory_alloc(s32 requested_size)
+json_memory_alloc(Context context, s32 requested_size)
 {
 	Memory_Block *last_block = context.memory.tail;
 	
@@ -207,7 +197,7 @@ json_memory_alloc(s32 requested_size)
 }
 
 internal void
-json_memory_free()
+json_memory_free(Context context)
 {
 	Memory_Block *block = context.memory.head;
 	Memory_Block *next_block = block->next;
@@ -221,7 +211,7 @@ json_memory_free()
 	}
 	if (block)
 	{
-		free(block->buffer);
+		//free(block->buffer);
 		free(block);
 	}
 	
@@ -230,8 +220,6 @@ json_memory_free()
 internal void 
 init_global_context(s32 block_size)
 { 
-	context.alloc = &json_memory_alloc;
-	context.free =  &json_memory_free;
 	
 	context.allocation_size = block_size;
 	
@@ -597,16 +585,16 @@ parse_key_value_pair(Parser *parser)
     if (!get_next_token(parser, &token))  return NULL; // invalid token.
     
 	// creating the key value pair as a Json_Type.
-	Json_Type *kvp = (Json_Type *)context.alloc(sizeof(Json_Type));
+	Json_Type *kvp = (Json_Type *)json_memory_alloc(context, (sizeof(Json_Type)));
 	kvp->type = TYPE_Object; 
 	kvp->object.next = NULL;
 	
 	// checks if there is a key
-    if (token.token_type != TOKEN_STRING)
-    {
-        LogError("error parsing(%d:%d): inside a object expected a key of type 'STRING', got type '%s'.", 
-                 parser->location.line, parser->location.character, token_name_map[token.token_type]); 
-        return NULL;
+	if (token.token_type != TOKEN_STRING)
+	{
+		LogError("error parsing(%d:%d): inside a object expected a key of type 'STRING', got type '%s'.", 
+				 parser->location.line, parser->location.character, token_name_map[token.token_type]); 
+		return NULL;
 	}
 	// it exists
 	string_slice s; 
@@ -615,18 +603,18 @@ parse_key_value_pair(Parser *parser)
 	kvp->object.key = s; 
 	
 	// check if there is a colon 
-    if (!get_next_token(parser, &token))  return NULL;
-    if (token.token_type != TOKEN_COLON) 
-    {
-        LogError("error parsing(%d:%d): inside an object, after key '%s' expected COLON, got '%s'.", 
-                 parser->location.line, parser->location.character, kvp->object.key.data, token.text);
-        return NULL;
-    }
+	if (!get_next_token(parser, &token))  return NULL;
+	if (token.token_type != TOKEN_COLON) 
+	{
+		LogError("error parsing(%d:%d): inside an object, after key '%s' expected COLON, got '%s'.", 
+				 parser->location.line, parser->location.character, kvp->object.key.data, token.text);
+		return NULL;
+	}
 	
-    // checks for a value
+	// checks for a value
 	if (get_next_token(parser, &token))
 	{
-		kvp->object.value = (Json_Type *)context.alloc(sizeof(Json_Type));
+		kvp->object.value = (Json_Type *)json_memory_alloc(context, (sizeof(Json_Type)));
 		if (token.token_type == TOKEN_LEFT_CURLY)       // object
 		{
 			kvp->object.value->object.value = NULL; 
@@ -764,12 +752,12 @@ array_add_element(Json_Type *arr, Json_Type elem)
 	
 	if (arr->array.capacity <= arr->array.index) 
 	{
-		// not enough space, realloc more space.
-		// TODO(ziv): use realloc here. 
-		size_t new_size = (size_t)((f64)arr->array.capacity		* 1.5f); // TODO(ziv): find a better way of finding a better number.
-		Json_Type *new_array = (Json_Type *)context.alloc(new_size);
-		memcpy(new_array, arr->array.data, arr->array.capacity);
-		arr->array.data = new_array; 
+		// reallocate the array
+		size_t new_size = (size_t)((double)arr->array.capacity * 1.5) * sizeof(Json_Type);
+		Json_Type *new_array = (Json_Type *)json_memory_alloc(context, new_size);
+		memcpy(new_array, arr->array.data, arr->array.index * sizeof(Json_Type));
+		arr->array.capacity = new_size;
+		arr->array.data = new_array;
 	}
 	
 	arr->array.data[arr->array.index++] = elem;
@@ -793,9 +781,9 @@ parse_array(Parser *parser, Json_Type *jt_array)
 	
 	// create the array
 	jt_array->type = TYPE_Array; 
-	jt_array->array.capacity = 50; 
-	jt_array->array.index    = 0; 
-	jt_array->array.data = (Json_Type *)context.alloc(sizeof(Json_Type) * jt_array->array.capacity);
+	jt_array->array.capacity = 2; 
+	jt_array->array.index    = 0;
+	jt_array->array.data = (Json_Type *)json_memory_alloc(context, (sizeof(Json_Type) * jt_array->array.capacity));
 	
 	while (get_next_token(parser, &token)) 
 	{
@@ -902,7 +890,7 @@ parse_json(char *input_buffer)
 	parser.text   = input_buffer; 
 	parser.location.line = 1; // Most code editors begin at line 1. 
 	
-	Json_Type *head = (Json_Type *)context.alloc(sizeof(Json_Type));
+	Json_Type *head = (Json_Type *)json_memory_alloc(context, (sizeof(Json_Type)));
 	
 	// look and see if it begins with a curly brace or a bracket.
 	Token token = {0}; 
@@ -958,7 +946,7 @@ internal char *
 slice_to_string(string slice)
 {
 	
-	char *result = (char *)context.alloc(slice.size+1); 
+	char *result = (char *)json_memory_alloc(context, (slice.size+1)); 
 	char *temp_char = result; 
 	for (s32 counter = 0; counter < slice.size; counter++)
 	{
@@ -1005,7 +993,7 @@ string_slice_to_integer(string number, size_t *result)
 		i++;
 	} 
 	
-	u32 index = 0;
+	unsigned int index = 0;
 	while ((c = number.data[i++]) && index < number.size)
 	{
 		if (!is_number(c)) {
@@ -1032,14 +1020,14 @@ string_slice_to_float(string_slice number, double *result)
 {
 	Assert(result || number.data || number.size > 1); 
 	
-	u32 sign = 1; 
+	unsigned int sign = 1; 
 	
 	string s; 
 	s.data  = number.data; 
 	s.index = 0; 
 	
 	// get the non-decimal number
-	u32 i = 0;
+	unsigned int i = 0;
 	while (i < number.size && number.data[i] != '.') i++; 
 	s.index = i; 
 	size_t num; 
@@ -1057,7 +1045,7 @@ string_slice_to_float(string_slice number, double *result)
 	
 	// combine to a number
 	double pow = 1; 
-	for (u32 index = 0; index < decimal_size-1; index++) pow *= 10.0;
+	for (unsigned int index = 0; index < decimal_size-1; index++) pow *= 10.0;
 	*result = (double)num + ((double)decimal/(double)pow);
 	return true;
 }

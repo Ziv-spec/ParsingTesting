@@ -235,9 +235,11 @@ int main(int argc, char **argv)
 				// print the structure (visual representation)
 				debug_print_json_tree(json_tree);
 				
-                //context.free(); // free the memory that holds the json tree.
-				free(buffer); // although, it should get freed at the end of the application.
+				// although, it should get freed at the end of the application.
 				// so... there is no need to do this in here. 
+				free(buffer);
+				
+				json_memory_free(context); // free the json structure as one block
             }
             else
             {
