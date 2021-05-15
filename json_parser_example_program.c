@@ -1,42 +1,42 @@
-#define internal static
 #include "json_hl.h"  // The header library.
 
-// some really quick witted debug printing for the Json_Type. 
+// some really quick witted debug printing for the Json_Type 
+// which can be changed in any way that you would like.
 
-internal void 
-debug_print_padding(s32 padding_level)
+JHL_STATIC void 
+debug_print_padding(int padding_level)
 {
 	for (int padding_counter = 0; padding_counter < padding_level; padding_counter++)
 	{
-		Log("  ");
+		JHL_Log("  ");
 	}
 }
 
-internal void debug_print_object(Json_Type *object, s32 padding_level);
-internal void debug_print_array(Json_Type *arr, s32 padding_level);
+JHL_STATIC void debug_print_object(Json_Type *object, int padding_level);
+JHL_STATIC void debug_print_array(Json_Type *arr, int padding_level);
 
-internal void
-debug_print_value(Json_Type *value, s32 padding_level)
+JHL_STATIC void
+debug_print_value(Json_Type *value, int padding_level)
 {
 	
 	if (value->type == TYPE_Object)
 	{
 		if (value)  debug_print_object(value, padding_level);
-		else Log("{}");
+		else JHL_Log("{}");
 	}
 	else 
 	{
 		if (value->type == TYPE_String)
 		{
-			Log("%c%s%c", '"',(char *)slice_to_string(value->string), '"'); 
+			JHL_Log("%c%s%c", '"',(char *)jhl_slice_to_string(value->string), '"'); 
 		}
 		else if (value->type == TYPE_Integer)
 		{
-			Log("%zu", value->integer);
+			JHL_Log("%zu", value->integer);
 		}
 		else if (value->type == TYPE_Float)
 		{
-			Log("%lf", value->floating_point);
+			JHL_Log("%lf", value->floating_point);
 		}
 		else if (value->type == TYPE_Object)
 		{
@@ -50,54 +50,54 @@ debug_print_value(Json_Type *value, s32 padding_level)
 		{
 			if (value->boolean) 
 			{
-				Log("true");
+				JHL_Log("true");
 			}
 			else
 			{
-				Log("false");
+				JHL_Log("false");
 			}
 		}
 	}
 }
 
-internal void
-debug_print_key_value_pair(string_slice key, Json_Type *value, s32 padding_level)
+JHL_STATIC void
+debug_print_key_value_pair(jhl_string key, Json_Type *value, int padding_level)
 {
 	// print the key
-	debug_print_padding(padding_level); Log("%c%s%c",'"', key.data, '"');  
+	debug_print_padding(padding_level); JHL_Log("%c%s%c",'"', key.data, '"');  
 	
 	// print the value
-	Log(": "); debug_print_value(value, padding_level); 
+	JHL_Log(": "); debug_print_value(value, padding_level); 
 }
 
 
-internal void
-debug_print_object(Json_Type *object, s32 padding_level)
+JHL_STATIC void
+debug_print_object(Json_Type *object, int padding_level)
 {
 	Assert(object->type == TYPE_Object);
 	if (!object) return;
 	
-	Log("{\n"); 
+	JHL_Log("{\n"); 
 	
 	for (; object->object.next; object = object->object.next)
 	{
 		debug_print_key_value_pair(object->object.key,
 								   object->object.value, 
-								   padding_level + 1); Log(", \n");
+								   padding_level + 1); JHL_Log(", \n");
 	}
 	debug_print_key_value_pair(object->object.key, 
 							   object->object.value, 
-							   padding_level + 1); Log("\n");
+							   padding_level + 1); JHL_Log("\n");
 	
-	debug_print_padding(padding_level); Log("}");
+	debug_print_padding(padding_level); JHL_Log("}");
 }
 
-internal void
-debug_print_array(Json_Type *arr, s32 padding_level)
+JHL_STATIC void
+debug_print_array(Json_Type *arr, int padding_level)
 {
 	Assert(arr->type == TYPE_Array);
 	
-	Log("[\n"); 
+	JHL_Log("[\n"); 
 	if (arr)
 	{
 		debug_print_padding(padding_level + 1); 
@@ -109,28 +109,28 @@ debug_print_array(Json_Type *arr, s32 padding_level)
 			
 			if (type == TYPE_String)
 			{
-				Log("%c%s%c", '"',(char *)slice_to_string(arr->array.data[i].string), '"'); 
-				Log(",\n"); debug_print_padding(padding_level+1);
+				JHL_Log("%c%s%c", '"',(char *)jhl_slice_to_string(arr->array.data[i].string), '"'); 
+				JHL_Log(",\n"); debug_print_padding(padding_level+1);
 			}
 			else if (type == TYPE_Integer)
 			{
-				Log("%zu", arr->array.data[i].integer);
-				Log(",\n"); debug_print_padding(padding_level+1);
+				JHL_Log("%zu", arr->array.data[i].integer);
+				JHL_Log(",\n"); debug_print_padding(padding_level+1);
 			}
 			else if (type == TYPE_Float)
 			{
-				Log("%lf", arr->array.data[i].floating_point);
-				Log(",\n"); debug_print_padding(padding_level+1);
+				JHL_Log("%lf", arr->array.data[i].floating_point);
+				JHL_Log(",\n"); debug_print_padding(padding_level+1);
 			}
 			else if (type == TYPE_Object)
 			{
 				debug_print_object(arr->array.data+i, padding_level + 1);
-				Log(","); Log("\n"); debug_print_padding(padding_level + 1); 
+				JHL_Log(","); JHL_Log("\n"); debug_print_padding(padding_level + 1); 
 			}
 			else if (type == TYPE_Array)
 			{
 				debug_print_array(arr->array.data+i, padding_level + 1);
-				Log(","); Log("\n"); debug_print_padding(padding_level + 1); 
+				JHL_Log(","); JHL_Log("\n"); debug_print_padding(padding_level + 1); 
 			}
 		}
 		
@@ -138,15 +138,15 @@ debug_print_array(Json_Type *arr, s32 padding_level)
 		Simple_Types type = arr->array.data[i].type;
 		if (type == TYPE_String)
 		{
-			Log("%c%s%c", '"',(char *)slice_to_string(arr->array.data[i].string), '"'); 
+			JHL_Log("%c%s%c", '"',(char *)jhl_slice_to_string(arr->array.data[i].string), '"'); 
 		}
 		else if (type == TYPE_Integer)
 		{
-			Log("%zu", arr->array.data[i].integer);
+			JHL_Log("%zu", arr->array.data[i].integer);
 		}
 		else if (type == TYPE_Float)
 		{
-			Log("%lf", arr->array.data[i].floating_point);
+			JHL_Log("%lf", arr->array.data[i].floating_point);
 		}
 		else if (type == TYPE_Object)
 		{
@@ -159,10 +159,10 @@ debug_print_array(Json_Type *arr, s32 padding_level)
 		
 	}
 	
-	Log("\n"); debug_print_padding(padding_level); Log("]"); 
+	JHL_Log("\n"); debug_print_padding(padding_level); JHL_Log("]"); 
 }
 
-internal void 
+JHL_STATIC void 
 debug_print_json_tree(Json_Type *json_type)
 {
 	if (json_type)
@@ -175,19 +175,19 @@ debug_print_json_tree(Json_Type *json_type)
 		{
 			debug_print_array(json_type, 0);
 		}
-		Log("\n");
+		JHL_Log("\n");
 	}
 }
 
-internal void
+JHL_STATIC void
 debug_print_token(Token token)
 {
     
     char *token_name = token_name_map[token.token_type];
     
     char padding[255];
-    s32 longest_size = string_size("TOKEN_RIGHT_BRACKET") - 1;
-    s32 token_string_size = string_size(token_name);
+    int longest_size = jhl_string_size("TOKEN_RIGHT_BRACKET") - 1;
+    int token_string_size = jhl_string_size(token_name);
     int counter = 0;
     for (; counter < longest_size - token_string_size; counter++)
     {
@@ -231,7 +231,7 @@ int main(int argc, char **argv)
                 
                 fclose(file);
                 
-				Json_Type *json_tree = parse_json(buffer);
+				Json_Type *json_tree = jhl_parse_json(buffer);
 				// print the structure (visual representation)
 				debug_print_json_tree(json_tree);
 				
@@ -239,7 +239,7 @@ int main(int argc, char **argv)
 				// so... there is no need to do this in here. 
 				free(buffer);
 				
-				json_memory_free(context); // free the json structure as one block
+				jhl_mem_free(context); // free the json structure as one block
             }
             else
             {
