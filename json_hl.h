@@ -4,16 +4,15 @@
 #define JSON_HL_H
 
 // TODO(ziv):
-// make the arrays expan as they currenly do not.
 // fix the context please as it is currently not functioning
 // correctly.
+// make the arrays expan as they currenly do not using the 
+// fixed context
 //
-// fix the unknown token bug where the recursion results in a
-// stackoverflow
+// cleanup of some tokens that are not needed like TOKEN_NONE 
+// and so on...
 //
-// cleanup of some tokens that are not needed like TOKEN_NONE and so on...
-//
-// add error messages where I forgot to 
+// add error messages where I forgot to (boolean, ...)
 // 
 // maybe have a key_value_pair representation in the Json_Type 
 // such that a object is just a couple of key_value_pair's 
@@ -406,20 +405,20 @@ get_next_token(Parser *parser, Token *token_out)
     
     // This should ONLY be used with a *string* in the first argument, and a *token type* in the second argument.
 #define TOKENIZE(token_string, is_token_type) if (*cursor == *token_string) { \
-   parser->location.index++;                   \
-   parser->location.character++;               \
-   token_out->token_type = is_token_type;      \
-   token_out->text = token_string;             \
-   success = true;                             \
-   }                                           \
+parser->location.index++;                   \
+parser->location.character++;               \
+token_out->token_type = is_token_type;      \
+token_out->text = token_string;             \
+success = true;                             \
+}                                           \
     
     TOKENIZE("{",TOKEN_LEFT_CURLY)
-    else TOKENIZE("}", TOKEN_RIGHT_CURLY)
-    else TOKENIZE(":", TOKEN_COLON)
-    else TOKENIZE(",", TOKEN_COMMA) 
-    else TOKENIZE("[", TOKEN_LEFT_BRACKET)
-    else TOKENIZE("]", TOKEN_RIGHT_BRACKET)
-    else if (*cursor == '"') // TOKEN_STRING
+		else TOKENIZE("}", TOKEN_RIGHT_CURLY)
+		else TOKENIZE(":", TOKEN_COLON)
+		else TOKENIZE(",", TOKEN_COMMA) 
+		else TOKENIZE("[", TOKEN_LEFT_BRACKET)
+		else TOKENIZE("]", TOKEN_RIGHT_BRACKET)
+		else if (*cursor == '"') // TOKEN_STRING
     {
         string slice_buffer = {0}; 
         parser->location.index++; // skip the beginning " 
@@ -439,6 +438,7 @@ get_next_token(Parser *parser, Token *token_out)
 		else if (*cursor)
         {
             parser->location.index++; // skip the ending "
+			parser->location.character++;
             
             char *token_text = slice_to_string(slice_buffer);
             token_out->text_size = slice_buffer.size;
@@ -464,59 +464,43 @@ get_next_token(Parser *parser, Token *token_out)
         {
             slice_buffer.size++;
             parser->location.index++;
+			parser->location.character++;
         }
         
         if (*cursor == '.') 
         {
             parser->location.index++; // skip the '.'
-            slice_buffer.size++;
+            parser->location.character++;
+			slice_buffer.size++;
             
             while (is_number(*cursor))
             {
                 slice_buffer.size++;
                 parser->location.index++;
+				parser->location.character++;
             }
             token_out->text = slice_to_string(slice_buffer);
 			token_out->text_size = slice_buffer.size;
             token_out->token_type = TOKEN_FLOAT;
             success = true;
         }
-        else // got unexpecte characters after the numbers
+        else // got unexpected characters after the numbers
         {
-            
-            Token next_token;
+			Token next_token;
             if (peek_next_token(parser, &next_token))
             {
-                if (next_token.token_type == TOKEN_UNKNOWN)
-                {
-                    get_next_token(parser, &next_token); // eat the next token.
+				if (next_token.token_type == TOKEN_UNKNOWN)
+				{
+					LogError("error(%d:%d): unknown value", 
+							 parser->location.line, parser->location.character);
 					
-					Assert(slice_buffer.data != NULL || next_token.text != NULL);
-                    
-                    s32 src1_size = slice_buffer.size;
-                    s32 src2_size = string_size(next_token.text);
-                    s32 dest_size = src1_size + src2_size + 1; 
-                    char *dest_buffer = (char *)context.alloc(dest_size);
-                    
-                    if (strmerge(dest_buffer, dest_size, 
-                                 slice_buffer.data, src1_size, 
-                                 next_token.text, src2_size))
-                    {
-                        LogError("error tokenizing(%d:%d): unknown value '%s'.", 
-                                 parser->location.line, parser->location.character, dest_buffer);
-					}
-                }
-                else
-                {
-					token_out->text = slice_to_string(slice_buffer); 
-					token_out->text_size = slice_buffer.size; 
-					token_out->token_type = TOKEN_INTEGER;
-					success = true;
-					//LogError("error tokenizing(%d:%d): unknown type to handle. parser is unable to understand what is going on, aka this is a bug. ",
-					//parser->location.line, parser->location.character);
+					return false;
 				}
-            }
-            
+				token_out->text = slice_buffer.data; 
+				token_out->text_size = slice_buffer.size; 
+				token_out->token_type = TOKEN_INTEGER;
+				success = true;
+			}
         }
     }
 	else if (*cursor == 'f' || *cursor == 't')
@@ -532,9 +516,16 @@ get_next_token(Parser *parser, Token *token_out)
 				   boolean_false[index] == *cursor)
 			{
 				parser->location.index++;
+				parser->location.character++; 
 				index++;
 			}
-			if (index < boolean_false_size) return false;
+			if (index < boolean_false_size) 
+			{
+				LogError("error(%d:%d): unrecognized token begins with '%c'", 
+						 parser->location.line, parser->location.character, 
+						 parser->text[parser->location.index-1]); 
+				return false;
+			}
 			
 			token_out->text      = boolean_false; 
 			token_out->text_size = boolean_false_size; 
@@ -543,16 +534,24 @@ get_next_token(Parser *parser, Token *token_out)
 		{
 			char *boolean_true = "true";
 			s32 boolean_true_size = string_size(boolean_true); 
-			s32 size = 0;
+			s32 index = 0;
 			
 			// check if boolean true
-			while (boolean_true[parser->location.index] && *cursor && 
-				   boolean_true[parser->location.index] == *cursor)
+			while (boolean_true[index] && *cursor && 
+				   boolean_true[index] == *cursor)
 			{
 				parser->location.index++;
-				size++;
+				parser->location.character++;
+				index++;
 			}
-			if (size < boolean_true_size) return true;
+			if (index < boolean_true_size) 
+			{
+				LogError("error(%d:%d): unrecognized token begins with '%c'", 
+						 parser->location.line, parser->location.character, 
+						 parser->text[parser->location.index-1]); 
+				return false;
+			}
+			
 			token_out->text      = boolean_true; 
 			token_out->text_size = boolean_true_size; 
 		}
@@ -567,27 +566,12 @@ get_next_token(Parser *parser, Token *token_out)
         token_out->text = '\0';
         return false;
     }
-    else // TOKEN_UNKNOWN
-    {
-#define MAX_BUFFER_SIZE 255
-        Token trash_token = {0}; // TOKEN_UNKNOWN 
-		char dest_text[MAX_BUFFER_SIZE];
-		s32 character_index = 0;
-		
-		while (peek_next_token(parser, &trash_token) && 
-			   trash_token.token_type == TOKEN_UNKNOWN)
-        {
-			// TODO(ziv): Fix the seemingly infinite call to the function as it creates a stackoverflow error.
-            // IMPORTANT(ziv): DO THIS PLEASE !!! 
-			get_next_token(parser, &trash_token); // eat the token. 
-			dest_text[character_index++] = *trash_token.text; 
-			if (character_index > MAX_BUFFER_SIZE)
-			{
-				Log("255 character is not enough for some reason, if you can explain to me why, then go ahead.");
-			}
-		}
-        
-    }
+    else // TOKEN_UNKNOWN 
+	{ 
+		LogError("error(%d:%d): unrecognized token begins with '%c'", 
+				 parser->location.line, parser->location.character, 
+				 parser->text[parser->location.index]); 
+	}
     
     // synces the out token location.  
     token_out->location = parser->location; 
@@ -760,6 +744,7 @@ parse_object(Parser *parser, Json_Type *jt_object)
 		}
 		else
 		{
+			
 			LogError("error parsing(%d:%d): expected right curly bracked, got '%s'.", 
 					 parser->location.line, parser->location.character, token.text)
 		}
