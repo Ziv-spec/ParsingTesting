@@ -21,18 +21,19 @@
 // as it might be confusing for others or something (but that 
 // remains to be seen). 
 //
-// Features: 
+// Features אto maybe add:
 //   *have a hash table like access (e.g. a function that creates 
 //    a hash table from the json tree). 
 //
 //   *have a function that allows access like the feature above 
-//    but it will not truly as fast (linear search)
+//    but it will not truly as fast (linear search).
 //
 //   *maybe use more/less of the C standard library.
 //    more for maybe performance, less just to not rely on it. 
 //
-//   *add more error messages and better ones (or rethink the who
-//    structure tho I don't recomment) 
+//   *add more error messages and better ones (or rethink the whole
+//    structure though I don't recomment because error messages are
+//    not that important in this instance).
 
 // TODO(ziv): To make this a true single header library 
 // it is required to change the types to different names 
@@ -94,32 +95,23 @@ typedef int32_t  b32;
 #include <string.h>
 #include <stdio.h> 
 #include <stdlib.h>
-
+#include <limits.h>
 
 ////////////////////////////////
 // 
 // Strings
 // 
 
-typedef union
+typedef struct
 {
-    struct 
+    union
     {
         s32 size;
-        char *data;
+        s32 index;
+		s32 capacity; 
     };
     
-    struct
-    {
-        s32 index;
-        char *data; 
-    };
-	
-	struct 
-	{
-		s32 capacity; 
-		char *data;
-	};
+	char *data;
 } string, string_slice;
 
 internal b32   string_compare(char *value1, char *value2); /* compares between two null terminated strings */ 
@@ -346,7 +338,8 @@ typedef enum Simple_Types
 	TYPE_Null    = 64
 } Simple_Types;
 
-typedef struct Json_Type
+typedef struct Json_Type Json_Type; 
+struct Json_Type
 {
 	Simple_Types type;
 	
@@ -355,7 +348,7 @@ typedef struct Json_Type
 		struct {
 			size_t capacity;
 			size_t index;
-			Json_Type *data;
+			struct Json_Type *data;
 		} array;
 		
 		struct {
@@ -372,7 +365,7 @@ typedef struct Json_Type
 		
 		b32 boolean;
 	};
-} Json_Type; 
+}; 
 
 // The following functions parse known types. 
 // They handle their own errors, and return NULL 
@@ -413,20 +406,20 @@ get_next_token(Parser *parser, Token *token_out)
     
     // This should ONLY be used with a *string* in the first argument, and a *token type* in the second argument.
 #define TOKENIZE(token_string, is_token_type) if (*cursor == *token_string) { \
-parser->location.index++;                   \
-parser->location.character++;               \
-token_out->token_type = is_token_type;      \
-token_out->text = token_string;             \
-success = true;                             \
-}                                           \
+   parser->location.index++;                   \
+   parser->location.character++;               \
+   token_out->token_type = is_token_type;      \
+   token_out->text = token_string;             \
+   success = true;                             \
+   }                                           \
     
     TOKENIZE("{",TOKEN_LEFT_CURLY)
-        else TOKENIZE("}", TOKEN_RIGHT_CURLY)
-        else TOKENIZE(":", TOKEN_COLON)
-        else TOKENIZE(",", TOKEN_COMMA) 
-        else TOKENIZE("[", TOKEN_LEFT_BRACKET)
-        else TOKENIZE("]", TOKEN_RIGHT_BRACKET)
-        else if (*cursor == '"') // TOKEN_STRING
+    else TOKENIZE("}", TOKEN_RIGHT_CURLY)
+    else TOKENIZE(":", TOKEN_COLON)
+    else TOKENIZE(",", TOKEN_COMMA) 
+    else TOKENIZE("[", TOKEN_LEFT_BRACKET)
+    else TOKENIZE("]", TOKEN_RIGHT_BRACKET)
+    else if (*cursor == '"') // TOKEN_STRING
     {
         string slice_buffer = {0}; 
         parser->location.index++; // skip the beginning " 
@@ -488,7 +481,7 @@ success = true;                             \
             token_out->token_type = TOKEN_FLOAT;
             success = true;
         }
-        else
+        else // got unexpecte characters after the numbers
         {
             
             Token next_token;
@@ -858,7 +851,7 @@ parse_array(Parser *parser, Json_Type *jt_array)
 			{
 				LogError("error(%d:%d): internal error, could not convert a integer token to a integer", 
 						 parser->location.line, parser->location.character);
-				return NULL; // unable to convert to integer
+				return false; // unable to convert to integer
 			}
 			
 			if (!array_add_element(jt_array, jt_int)) return false; // out of memory
@@ -1039,7 +1032,7 @@ string_slice_to_integer(string number, size_t *result)
 			|| (n < 0 && ival > (1 << 31)))
 		{
 			LogError("error integer");
-			errno = ERANGE;  // TODO(ziv): check what is this doing.
+			//errno = ERANGE;  // TODO(ziv): check what is this doing.
 			*result = (n > 0 ? LONG_MAX : LONG_MIN); 
 			return false;
 		}

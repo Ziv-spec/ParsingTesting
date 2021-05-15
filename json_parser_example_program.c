@@ -1,5 +1,4 @@
 #define internal static
-#include "language.h" // Ignore for now, I will make it a part of the hl_json librarly soon.
 #include "json_hl.h"  // The header library.
 
 // some really quick witted debug printing for the Json_Type. 
