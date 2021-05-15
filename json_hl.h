@@ -5,13 +5,34 @@
 
 // TODO(ziv):
 // make the arrays expan as they currenly do not.
-// fix the context please as it is currently not functioning correctly.
+// fix the context please as it is currently not functioning
+// correctly.
+//
+// fix the unknown token bug where the recursion results in a
+// stackoverflow
+//
+// cleanup of some tokens that are not needed like TOKEN_NONE and so on...
+//
+// add error messages where I forgot to 
 // 
+// maybe have a key_value_pair representation in the Json_Type 
+// such that a object is just a couple of key_value_pair's 
+// connected to each other instead of them all being objects 
+// as it might be confusing for others or something (but that 
+// remains to be seen). 
+//
 // Features: 
-//   *have a hash table like access (e.g. a function that creates a hash table from the json tree). 
-//   *have a function that allows access like the feature above but it will not truly as fast (linear search)
+//   *have a hash table like access (e.g. a function that creates 
+//    a hash table from the json tree). 
+//
+//   *have a function that allows access like the feature above 
+//    but it will not truly as fast (linear search)
+//
 //   *maybe use more/less of the C standard library.
-//   *add more error messages and better ones (or rethink the who structure tho I don't recomment) 
+//    more for maybe performance, less just to not rely on it. 
+//
+//   *add more error messages and better ones (or rethink the who
+//    structure tho I don't recomment) 
 
 // TODO(ziv): To make this a true single header library 
 // it is required to change the types to different names 
@@ -296,6 +317,7 @@ init_token_to_string_map()
     token_name_map[TOKEN_INTEGER]       = "INTEGER"; 
     token_name_map[TOKEN_STRING]        = "STRING"; 
     token_name_map[TOKEN_FLOAT]         = "FLOAT"; 
+	token_name_map[TOKEN_BOOL]          = "BOOL";
 }
 
 
