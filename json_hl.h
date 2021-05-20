@@ -4,17 +4,19 @@
 // This libaray parses json files. 
 // 
 // TODO: 
-//     Handle integers properly such that they don't overflow 
+//     In jhl_mem_alloc make memory alligned for faster performance.
+//     Handle integers properly such that they error when overflow 
 //     clean up tokens like TOKEN_NONE
+//     add a null to the parser
 //     maybe have a key_value_pair representation in the Json_Type
 //     have a hash table like access? 
 //     function to access types not as hash table? 
-//     maybe use more/less of the C standard library?
+//     maybe use more/less of the C standard library? 
 //
 // USAGE
 // 
 // To use this library you should include it to your project
-// as per usual. 
+// as per usual, in each C/C++ file you need. 
 //
 //   jhl_parse_json()  -- parse the text buffer and return the json structure
 //   
@@ -42,9 +44,9 @@
 //     } object;
 //   
 //     jhl_string string;
-//     size_t integer;
-//     double floating_point;
-//     b32 boolean;
+//     size_t     integer;
+//     double     floating_point;
+//     b32        boolean;
 //   };
 // }; 
 //
@@ -256,20 +258,11 @@ debug_print_token(Token token)
 }
 
 
-
 int main(int argc, char **argv)
 {
-#if DEBUG
-	if (argc == 1)
-#else
     if (argc == 2) 
-#endif 
     {
         char *file_name = argv[1]; 
-		
-#if DEBUG
-        file_name = "C:\\dev\\json\\json_example.json";
-#endif
 		
         FILE *file = fopen(file_name, "r"); 
         if (file)
@@ -323,6 +316,11 @@ int main(int argc, char **argv)
 
 #ifndef JSON_HL_H
 #define JSON_HL_H
+
+#ifdef __cplusplus
+extern "C" 
+{
+#endif
 
 ////////////////////////////////
 //
@@ -497,13 +495,13 @@ jhl_init_global_context(int block_size)
 typedef struct jhl_string jhl_string;
 struct jhl_string
 {
-    union
-    {
-        int size;
-        int index;
+	union
+	{
+		int size;
+		int index;
 		int capacity; 
-    };
-    
+	};
+	
 	char *data;
 };
 
@@ -618,39 +616,39 @@ jhl_string_to_float(jhl_string number, double *result)
 
 typedef struct Location
 {
-    int index;     // index withing the general buffer.
-    int line;      // line number withing the file.
-    int character; // character at the line.
+	int index;     // index withing the general buffer.
+	int line;      // line number withing the file.
+	int character; // character at the line.
 } Location; 
 
 typedef struct Parser
 {
-    char *text; // The buffer.
-    Location location; // parsers location in the text buffer.
+	char *text; // The buffer.
+	Location location; // parsers location in the text buffer.
 } Parser; 
 
 typedef enum Token_Types // all characters known to the parser.
 {
-    TOKEN_UNKNOWN       = 0,   // 0x0
-    TOKEN_LEFT_CURLY    = 1,   // 0x1
-    TOKEN_RIGHT_CURLY   = 2,   // 0x2
-    TOKEN_RIGHT_BRACKET = 4,   // 0x4 
-    TOKEN_LEFT_BRACKET  = 8,   // 0x8
-    TOKEN_SEMI_COLEN    = 16,  // 1x0 
-    TOKEN_COLON         = 32,  // 2x0
-    TOKEN_COMMA         = 64,  // 4x0
-    TOKEN_INTEGER       = 128, // 8x0
-    TOKEN_STRING        = 256, // 10x0 
-    TOKEN_FLOAT         = 512, // 20x0
-    TOKEN_BOOL          = 1024,// 40x0
+	TOKEN_UNKNOWN       = 0,   // 0x0
+	TOKEN_LEFT_CURLY    = 1,   // 0x1
+	TOKEN_RIGHT_CURLY   = 2,   // 0x2
+	TOKEN_RIGHT_BRACKET = 4,   // 0x4 
+	TOKEN_LEFT_BRACKET  = 8,   // 0x8
+	TOKEN_SEMI_COLEN    = 16,  // 1x0 
+	TOKEN_COLON         = 32,  // 2x0
+	TOKEN_COMMA         = 64,  // 4x0
+	TOKEN_INTEGER       = 128, // 8x0
+	TOKEN_STRING        = 256, // 10x0 
+	TOKEN_FLOAT         = 512, // 20x0
+	TOKEN_BOOL          = 1024,// 40x0
 	TOKEN_NONE          = 2048 // 80x0
 } Token_Types;
 
 typedef struct Token
 {
-    Token_Types token_type; // Type of the token.
-    Location location;      // location of the token in the text buffer (inside the parser).
-    char *text;   // text for the token.
+	Token_Types token_type; // Type of the token.
+	Location location;      // location of the token in the text buffer (inside the parser).
+	char *text;   // text for the token.
 	int text_size;// the size of the text.
 } Token;
 
@@ -662,18 +660,18 @@ init_token_to_string_map()
 {
 	// all of tokens that I currently support, 
 	// maped to a string represeting it. 
-    
+	
 	token_name_map[TOKEN_LEFT_CURLY]    = "LEFT_CURLY"; 
-    token_name_map[TOKEN_RIGHT_CURLY]   = "RIGHT_CURLY"; 
-    token_name_map[TOKEN_RIGHT_BRACKET] = "RIGHT_BRACKET"; 
-    token_name_map[TOKEN_LEFT_BRACKET]  = "LEFT_BRACKET"; 
-    token_name_map[TOKEN_SEMI_COLEN]    = "SEMI_COLEN";
-    token_name_map[TOKEN_COLON]         = "COLON";
-    token_name_map[TOKEN_COMMA]         = "COMMA"; 
-    
-    token_name_map[TOKEN_INTEGER]       = "INTEGER"; 
-    token_name_map[TOKEN_STRING]        = "STRING"; 
-    token_name_map[TOKEN_FLOAT]         = "FLOAT"; 
+	token_name_map[TOKEN_RIGHT_CURLY]   = "RIGHT_CURLY"; 
+	token_name_map[TOKEN_RIGHT_BRACKET] = "RIGHT_BRACKET"; 
+	token_name_map[TOKEN_LEFT_BRACKET]  = "LEFT_BRACKET"; 
+	token_name_map[TOKEN_SEMI_COLEN]    = "SEMI_COLEN";
+	token_name_map[TOKEN_COLON]         = "COLON";
+	token_name_map[TOKEN_COMMA]         = "COMMA"; 
+	
+	token_name_map[TOKEN_INTEGER]       = "INTEGER"; 
+	token_name_map[TOKEN_STRING]        = "STRING"; 
+	token_name_map[TOKEN_FLOAT]         = "FLOAT"; 
 	token_name_map[TOKEN_BOOL]          = "BOOL";
 }
 
@@ -745,28 +743,28 @@ JHL_STATIC Json_Type *parse_json(char *input_buffer);
 JHL_STATIC b32
 jhl_get_next_token(Parser *parser, Token *token_out)
 {
-    b32 success = false;
-    
-    // 'cursor' is my current location (at all times) in the text buffer. 
-    // as such it is a pointer to that text buffer, not a character.
+	b32 success = false;
+	
+	// 'cursor' is my current location (at all times) in the text buffer. 
+	// as such it is a pointer to that text buffer, not a character.
 #define cursor (parser->text + parser->location.index)
-    
-    if (!(*cursor))  return success; // make sure that I am not at the end
-    
-    // skip all values that have not meaning (in any context).
+	
+	if (!(*cursor))  return success; // make sure that I am not at the end
+	
+	// skip all values that have not meaning (in any context).
 #define trash_value(value) (value  == ' ' || value == '\n' || value == '\t')
-    while (trash_value(*cursor))
-    {
-        if (*cursor == '\n')
-        {
-            parser->location.line++;
-            parser->location.character = 0;
-        }
-        parser->location.character++;
-        parser->location.index++;
-    }
-    
-    // This should ONLY be used with a *string* in the first argument, and a *token type* in the second argument.
+	while (trash_value(*cursor))
+	{
+		if (*cursor == '\n')
+		{
+			parser->location.line++;
+			parser->location.character = 0;
+		}
+		parser->location.character++;
+		parser->location.index++;
+	}
+	
+	// This should ONLY be used with a *string* in the first argument, and a *token type* in the second argument.
 #define TOKENIZE(token_string, is_token_type) if (*cursor == *token_string) { \
 parser->location.index++;                   \
 parser->location.character++;               \
@@ -774,84 +772,84 @@ token_out->token_type = is_token_type;      \
 token_out->text = token_string;             \
 success = true;                             \
 }                                           \
-    
-    TOKENIZE("{",TOKEN_LEFT_CURLY)
+	
+	TOKENIZE("{",TOKEN_LEFT_CURLY)
 		else TOKENIZE("}", TOKEN_RIGHT_CURLY)
 		else TOKENIZE(":", TOKEN_COLON)
 		else TOKENIZE(",", TOKEN_COMMA) 
 		else TOKENIZE("[", TOKEN_LEFT_BRACKET)
 		else TOKENIZE("]", TOKEN_RIGHT_BRACKET)
 		else if (*cursor == '"') // TOKEN_STRING
-    {
-        jhl_string slice_buffer = {0}; 
-        parser->location.index++; // skip the beginning " 
+	{
+		jhl_string slice_buffer = {0}; 
+		parser->location.index++; // skip the beginning " 
 		slice_buffer.data = cursor;
 		
 		while (*cursor && *cursor != '"' && *cursor != '\n')
-        {
-            slice_buffer.size++;
-            parser->location.index++;
-            parser->location.character++;
-        }
+		{
+			slice_buffer.size++;
+			parser->location.index++;
+			parser->location.character++;
+		}
 		if (*cursor == '\n')
 		{
 			JHL_LogError("error tokenizing(%d:%d): expected closing semi colon for a STRING type.", 
 						 parser->location.line, parser->location.character);
 		}
 		else if (*cursor)
-        {
-            parser->location.index++; // skip the ending "
+		{
+			parser->location.index++; // skip the ending "
 			parser->location.character++;
-            
-            char *token_text = jhl_slice_to_string(slice_buffer);
-            token_out->text_size = slice_buffer.size;
-			token_out->text = token_text;
-            token_out->token_type = TOKEN_STRING;
-            success = true;
-        }
-        else // the cursor is a nullterminator aka end of file.  
-        {
-            JHL_LogError("error tokenizing(%d:%d): end of file.\nThis is probably due to a missing semi colon.", 
-						 parser->location.line, parser->location.character);
-            return false;
-        }
-        
-    }
-    else if (is_number(*cursor)) // TOKEN_INTEGER or TOKEN_FLOAT
-    {
-        jhl_string slice_buffer = {0};
-        slice_buffer.data = cursor; // beginning of slice.
-        
-        // Loops until it finds something that is not a number.
-        while (is_number(*cursor))
-        {
-            slice_buffer.size++;
-            parser->location.index++;
-			parser->location.character++;
-        }
-        
-        if (*cursor == '.') 
-        {
-            parser->location.index++; // skip the '.'
-            parser->location.character++;
-			slice_buffer.size++;
-            
-            while (is_number(*cursor))
-            {
-                slice_buffer.size++;
-                parser->location.index++;
-				parser->location.character++;
-            }
-            token_out->text = jhl_slice_to_string(slice_buffer);
+			
+			char *token_text = jhl_slice_to_string(slice_buffer);
 			token_out->text_size = slice_buffer.size;
-            token_out->token_type = TOKEN_FLOAT;
-            success = true;
-        }
-        else // got unexpected characters after the numbers
-        {
+			token_out->text = token_text;
+			token_out->token_type = TOKEN_STRING;
+			success = true;
+		}
+		else // the cursor is a nullterminator aka end of file.  
+		{
+			JHL_LogError("error tokenizing(%d:%d): end of file.\nThis is probably due to a missing semi colon.", 
+						 parser->location.line, parser->location.character);
+			return false;
+		}
+		
+	}
+	else if (is_number(*cursor)) // TOKEN_INTEGER or TOKEN_FLOAT
+	{
+		jhl_string slice_buffer = {0};
+		slice_buffer.data = cursor; // beginning of slice.
+		
+		// Loops until it finds something that is not a number.
+		while (is_number(*cursor))
+		{
+			slice_buffer.size++;
+			parser->location.index++;
+			parser->location.character++;
+		}
+		
+		if (*cursor == '.') 
+		{
+			parser->location.index++; // skip the '.'
+			parser->location.character++;
+			slice_buffer.size++;
+			
+			while (is_number(*cursor))
+			{
+				slice_buffer.size++;
+				parser->location.index++;
+				parser->location.character++;
+			}
+			token_out->text = jhl_slice_to_string(slice_buffer);
+			token_out->text_size = slice_buffer.size;
+			token_out->token_type = TOKEN_FLOAT;
+			success = true;
+		}
+		else // got unexpected characters after the numbers
+		{
 			Token next_token;
-            if (jhl_peek_next_token(parser, &next_token))
-            {
+			if (jhl_peek_next_token(parser, &next_token))
+			{
 				if (next_token.token_type == TOKEN_UNKNOWN)
 				{
 					JHL_LogError("error(%d:%d): unknown value", 
@@ -864,8 +862,8 @@ success = true;                             \
 				token_out->token_type = TOKEN_INTEGER;
 				success = true;
 			}
-        }
-    }
+		}
+	}
 	else if (*cursor == 'f' || *cursor == 't')
 	{
 		if (*cursor == 'f') // expecting "false"
@@ -923,42 +921,42 @@ success = true;                             \
 		success = true;
 		
 	}
-    else if (*cursor == '\0')
-    {
-        token_out->token_type = TOKEN_NONE;
-        token_out->text = '\0';
-        return false;
-    }
-    else // TOKEN_UNKNOWN 
+	else if (*cursor == '\0')
+	{
+		token_out->token_type = TOKEN_NONE;
+		token_out->text = '\0';
+		return false;
+	}
+	else // TOKEN_UNKNOWN 
 	{ 
 		JHL_LogError("error(%d:%d): unrecognized token begins with '%c'", 
 					 parser->location.line, parser->location.character, 
 					 parser->text[parser->location.index]); 
 	}
-    
-    // synces the out token location.  
-    token_out->location = parser->location; 
-    
-    return success;
+	
+	// synces the out token location.  
+	token_out->location = parser->location; 
+	
+	return success;
 }
 
 JHL_STATIC b32
 jhl_peek_next_token(Parser *parser, Token *token_out)
 {
-    Location old_location = parser->location;
-    b32 success = jhl_get_next_token(parser, token_out); 
-    parser->location = old_location; // reseting the parser location.
+	Location old_location = parser->location;
+	b32 success = jhl_get_next_token(parser, token_out); 
+	parser->location = old_location; // reseting the parser location.
 	// because jhl_get_next_token moved the location, we use the old one instead.
-    return success;
+	return success;
 }
 
 JHL_STATIC Json_Type *
 jhl_parse_key_value_pair(Parser *parser)
 {
 	// looks at the first token in the key value pair.
-    Token token;
-    if (!jhl_get_next_token(parser, &token))  return NULL; // invalid token.
-    
+	Token token;
+	if (!jhl_get_next_token(parser, &token))  return NULL; // invalid token.
+	
 	// creating the key value pair as a Json_Type.
 	Json_Type *kvp = (Json_Type *)jhl_mem_alloc(context, (sizeof(Json_Type)));
 	kvp->type = TYPE_Object; 
@@ -1078,7 +1076,7 @@ jhl_parse_object(Parser *parser, Json_Type *jt_object)
 	if (!kvl_head) return false; 
 	
 	Json_Type *kvp = NULL;
-    success = jhl_get_next_token(parser, &token);
+	success = jhl_get_next_token(parser, &token);
 	if (success && token.token_type == TOKEN_COMMA)
 	{
 		kvp = jhl_parse_key_value_pair(parser);
@@ -1145,7 +1143,7 @@ JHL_STATIC b32
 jhl_parse_array(Parser *parser, Json_Type *jt_array)
 {
 	Token token; 
-    b32 success = false;
+	b32 success = false;
 	
 	// handle empty list.
 	if (jhl_peek_next_token(parser, &token) && token.token_type == TOKEN_RIGHT_BRACKET)
@@ -1286,5 +1284,9 @@ jhl_parse_json(char *input_buffer)
 	
 	return head;
 }
+
+#ifdef __cplusplus
+}
+#endif // __cplusplus
 
 #endif //JSON_HL_H
